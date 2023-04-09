@@ -236,10 +236,10 @@ a:hover{
 /* MOBILE */
 
 @media (max-width:768px){
-    header,main,footer{display:flex;flex-direction: column;align-items: center;}
-    ul{display:flex;padding:0;}
+    header,main,footer{display:flex;flex-direction:column;align-items: center;}
+    ul{display:flex;padding:0;flex-direction: column}
     a{color:black;font-size:22px;padding:5px;margin:5px;}
-    p{font-size:22px;}
-    
-
+    nav{display:flex;flex-direction: column;}
+    p{font-size:22px;text-align: center;}
+	
 }
