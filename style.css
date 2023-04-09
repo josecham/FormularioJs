@@ -1,12 +1,5 @@
 
-.genio{ 
-    background-color: rgba(197, 199, 80, 0.247);
-    border: 3px solid beige;
-    max-width: 800px;
-	width: 90%;
-	margin: auto;
-	padding: 40px;
-}
+
 
 p{
     font-family:'Courier New', Courier, monospace;
@@ -15,10 +8,7 @@ p{
     font-style:normal;
 }
 
-body {
-	font-family: 'Roboto', sans-serif;
-	background: #E5E5E5;
-}
+
 
 /* FLEX*/
 header, ul, footer{display: flex;}/* se acomodo con fexbox el header y footer */
@@ -56,11 +46,7 @@ header{
     text-align: center;
     }
 
-.formulario {
-	display: grid;
-	grid-template-columns: 1fr 1fr;
-	gap: 20px;
-}
+
 
 .formulario__label {
 	display: block;
@@ -208,6 +194,18 @@ header{
     header{grid-area: header;}
     main{grid-area: main;}
     footer{grid-area:footer;}
+	body {
+		font-family: 'Roboto', sans-serif;
+		background: #E5E5E5;
+	}
+	.genio{ 
+		background-color: rgba(197, 199, 80, 0.247);
+		border: 3px solid beige;
+		max-width: 800px;
+		width: 90%;
+		margin: auto;
+		padding: 40px;
+	}
 	.formulario {
 		grid-template-columns: 1fr;
 	}
@@ -232,6 +230,13 @@ a:hover{
     border-radius: 20px;
 } 
 
+
+.formulario {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 20px;
+}
+
 }
 /* MOBILE */
 
@@ -241,5 +246,12 @@ a:hover{
     a{color:black;font-size:22px;padding:5px;margin:5px;}
     nav{display:flex;flex-direction: column;}
     p{font-size:22px;text-align: center;}
-	
+	.genio{ 
+		background-color: rgba(197, 199, 80, 0.247);
+		border: 3px solid beige;
+		max-width: 800px;
+		
+		margin: auto;
+		padding: 40px;
+	}
 }
