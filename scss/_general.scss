@@ -1,0 +1,44 @@
+p{
+    font-family:'Courier New', Courier, monospace;
+    font-size:20px;
+    font-weight:normal;
+    font-style:normal;
+}
+
+
+
+/* FLEX*/
+header, ul, footer{display: flex;}/* se acomodo con fexbox el header y footer */
+.producto{justify-content: space-between;}
+.align-items-center{align-items: center;}
+.logo{
+    height: 100px;
+}
+iframe{border-radius: 20px;margin:20px;align-items: center;}
+
+/* BOX MODEL*/
+li{padding:20px;}
+.mt20{margin-top:20px;}
+.p20{padding:20px;}
+
+/* GENERAL */
+ul{list-style-type: none;}
+a{text-decoration: none;font-size:22px;}
+h1{text-align: center;}
+body{margin:0;}
+img{
+    border-radius: 20px;
+    width: 100%;
+    }
+
+header{
+    position: sticky; top: 0px;
+    justify-content: space-between;
+}
+
+.parrafo-2{
+    color:black ;
+    background-color:lightgray;
+    border: 3px solid beige;
+    text-align: center;
+    }

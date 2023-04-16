@@ -1,0 +1,63 @@
+/* ----- -----  Mediaqueries ----- ----- */
+@media  (min-width:1024px){
+    .grid{
+        display:grid; /*propiedad que nos habilita el uso de grillas*/
+    }
+    .grid{
+        /* 1 columna y 3 filas */
+        display: grid;
+        grid-template-areas: 
+        "header"
+        "main"
+        "footer";
+        grid-template-columns:100%;
+        grid-template-rows:auto auto auto;
+    }
+    /* cada etiqueta a que parte representa */
+    header{grid-area: header;}
+    main{grid-area: main;}
+    footer{grid-area:footer;}
+	body {
+		font-family: 'Roboto', sans-serif;
+		background: #E5E5E5;
+	}
+	.genio{ 
+		background-color: rgba(197, 199, 80, 0.247);
+		border: 3px solid beige;
+		max-width: 800px;
+		width: 90%;
+		margin: auto;
+		padding: 40px;
+	}
+	.formulario {
+		grid-template-columns: 1fr;
+	}
+
+	.formulario__grupo-terminos, 
+	.formulario__mensaje,
+	.formulario__grupo-btn-enviar {
+		grid-column: 1;
+	}
+
+	.formulario__btn {
+		width: 100%;
+	}
+    
+    /* LA PSEUDOCLASES */
+a{text-decoration: none;color:#1e39d1;transition:1s all;}
+a:hover{
+    color:rgb(229, 255, 0);
+    font-size:20px;
+    background-color:rgb(0, 60, 255);
+    padding:10px;
+    border-radius: 20px;
+} 
+
+
+.formulario {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 20px;
+}
+
+}
