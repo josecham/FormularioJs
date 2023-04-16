@@ -17,7 +17,7 @@ header, ul, footer{display: flex;}/* se acomodo con fexbox el header y footer */
 iframe{border-radius: 20px;margin:20px;align-items: center;}
 
 /* BOX MODEL*/
-li{padding:20px;}
+
 .mt20{margin-top:20px;}
 .p20{padding:20px;}
 
@@ -195,6 +195,7 @@ header{
 		font-family: 'Roboto', sans-serif;
 		background: #E5E5E5;
 	}
+	li{padding:20px;}
 	.genio{ 
 		background-color: rgba(197, 199, 80, 0.247);
 		border: 3px solid beige;
@@ -243,6 +244,7 @@ a:hover{
     a{color:black;font-size:22px;padding:5px;margin:5px;}
     nav{display:flex;flex-direction: column;}
     p{font-size:22px;text-align: center;}
+	li{padding:2px;}
 	.genio{ 
 		background-color: rgba(197, 199, 80, 0.247);
 		border: 3px solid beige;
