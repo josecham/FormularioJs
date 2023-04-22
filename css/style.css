@@ -24,7 +24,7 @@ iframe{border-radius: 20px;margin:20px;align-items: center;}
 /* GENERAL */
 ul{list-style-type: none;}
 a{text-decoration: none;font-size:22px;}
-h1{text-align: center;}
+h1{text-align: center; color: darkblue;}
 body{margin:0;}
 img{
     border-radius: 20px;
@@ -170,7 +170,9 @@ header{
 .formulario__grupo-incorrecto .formulario__input {
 	border: 3px solid #bb2929;
 }
-
+.icono{
+	width: auto;
+ }
 
 /* ----- -----  Mediaqueries ----- ----- */
 @media  (min-width:1024px){
@@ -253,6 +255,7 @@ a:hover{
 		margin: auto;
 		padding: 40px;
 	}
+	
 }
 
 
