@@ -34,6 +34,7 @@ img{
 header{
     position: sticky; top: 0px;
     justify-content: space-between;
+	z-index: 9999;
 }
 
 .parrafo-2{
