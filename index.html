@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Blox Universe 3D</title>
+    <title>Blox Life Simulator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -12,56 +12,35 @@
         @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@700&display=swap');
         body { font-family: 'Fredoka', sans-serif; background: #00A2FF; margin: 0; overflow: hidden; touch-action: none; }
         
-        /* Efecto de Universo / Perspectiva */
-        .world {
-            perspective: 1000px;
-            width: 100vw; height: 100vh;
-            display: flex; align-items: center; justify-content: center;
+        /* Escena 3D */
+        .world { perspective: 1200px; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .floor { 
+            width: 4000px; height: 4000px; background-color: #7cfc00;
+            background-image: repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(0,0,0,0.05) 40px),
+                              repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(0,0,0,0.05) 40px);
+            transform: rotateX(60deg); position: absolute; transition: transform 0.1s linear;
         }
 
-        .floor {
-            width: 2000px; height: 2000px;
-            background-color: #7cfc00;
-            background-image: radial-gradient(#6edb00 2px, transparent 2px);
-            background-size: 40px 40px;
-            transform: rotateX(60deg) translateY(-200px);
-            position: absolute;
-            transition: transform 0.1s linear;
+        /* Personaje Personalizable */
+        .cube-player { position: absolute; width: 50px; height: 80px; transform-style: preserve-3d; transition: transform 0.1s; }
+        .side { position: absolute; width: 100%; height: 100%; border: 2px solid rgba(0,0,0,0.1); }
+        .front { transform: translateZ(25px); }
+        .back  { transform: rotateY(180deg) translateZ(25px); filter: brightness(0.8); }
+        .top   { height: 50px; transform: rotateX(90deg) translateZ(25px); filter: brightness(1.1); }
+
+        /* La Casa */
+        .house {
+            position: absolute; width: 150px; height: 120px; background: #e74c3c;
+            transform: translate3d(200px, -400px, 50px); transform-style: preserve-3d;
+        }
+        .roof { 
+            position: absolute; width: 100%; height: 100%; background: #c0392b;
+            transform: translateY(-50px) rotateX(45deg); 
         }
 
-        /* Personaje 3D (Cubo) */
-        .cube-player {
-            position: absolute;
-            width: 50px; height: 80px;
-            transform-style: preserve-3d;
-            transition: all 0.1s linear;
-        }
-        .side {
-            position: absolute; width: 100%; height: 100%;
-            border: 2px solid rgba(0,0,0,0.1);
-        }
-        .front  { background: #FFD966; transform: translateZ(25px); }
-        .back   { background: #E69138; transform: rotateY(180deg) translateZ(25px); }
-        .right  { background: #F1C232; width: 50px; transform: rotateY(90deg) translateZ(25px); }
-        .left   { background: #F1C232; width: 50px; transform: rotateY(-90deg) translateZ(25px); }
-        .top    { background: #FFD966; height: 50px; transform: rotateX(90deg) translateZ(25px); }
-
-        /* Moneda 3D */
-        .item-3d {
-            position: absolute;
-            width: 30px; height: 30px;
-            background: #FFD700;
-            border-radius: 50%;
-            border: 4px solid #B8860B;
-            transform: rotateX(60deg);
-            animation: float 1s infinite alternate;
-        }
-
-        @keyframes float { from { margin-top: 0; } to { margin-top: -20px; } }
-
-        .ui { position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; }
-        .joy-area { position: absolute; bottom: 50px; left: 50px; width: 150px; height: 150px; background: rgba(255,255,255,0.2); border-radius: 50%; pointer-events: auto; }
-        .stick { width: 60px; height: 60px; background: white; border-radius: 50%; position: absolute; top: 45px; left: 45px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        .item-3d { position: absolute; width: 30px; height: 30px; background: #FFD700; border-radius: 50%; border: 4px solid #B8860B; transform: rotateX(60deg); }
+        .joy-area { width: 140px; height: 140px; background: rgba(255,255,255,0.2); border-radius: 50%; position: relative; pointer-events: auto; }
+        .stick { width: 60px; height: 60px; background: white; border-radius: 50%; position: absolute; top: 40px; left: 40px; }
     </style>
 </head>
 <body>
@@ -71,10 +50,12 @@
         const { useState, useEffect, useRef } = React;
 
         const App = () => {
-            const [view, setView] = useState('menu');
+            const [view, setView] = useState('menu'); // menu, game, shop
             const [coins, setCoins] = useState(0);
             const [pos, setPos] = useState({ x: 0, y: 0 });
             const [coinPos, setCoinPos] = useState({ x: 100, y: -200 });
+            const [skin, setSkin] = useState('#FFD966'); // Color por defecto
+            const [hasHouse, setHasHouse] = useState(false);
             
             const joystick = useRef({ x: 0, y: 0, active: false });
             const requestRef = useRef();
@@ -82,17 +63,14 @@
             const update = () => {
                 if (joystick.current.active) {
                     setPos(prev => {
-                        const newX = prev.x - joystick.current.x * 10;
-                        const newY = prev.y - joystick.current.y * 10;
-
-                        // Detección de colisión con la moneda
-                        const dx = newX + coinPos.x;
-                        const dy = newY + coinPos.y;
-                        if (Math.sqrt(dx*dx + dy*dy) < 50) {
-                            setCoins(c => c + 1);
-                            setCoinPos({ x: Math.random() * 600 - 300, y: Math.random() * 600 - 300 });
+                        const newX = prev.x - joystick.current.x * 12;
+                        const newY = prev.y - joystick.current.y * 12;
+                        
+                        // Colisión moneda
+                        if (Math.sqrt(Math.pow(newX + coinPos.x, 2) + Math.pow(newY + coinPos.y, 2)) < 60) {
+                            setCoins(c => c + 10);
+                            setCoinPos({ x: Math.random() * 800 - 400, y: Math.random() * 800 - 400 });
                         }
-
                         return { x: newX, y: newY };
                     });
                 }
@@ -104,58 +82,102 @@
                 return () => cancelAnimationFrame(requestRef.current);
             }, [coinPos]);
 
-            const handleStart = () => joystick.current.active = true;
-            const handleEnd = () => { joystick.current.active = false; joystick.current.x = 0; joystick.current.y = 0; };
-            const handleMove = (e) => {
-                if (!joystick.current.active) return;
-                const touch = e.touches ? e.touches[0] : e;
-                const area = document.getElementById('joy').getBoundingClientRect();
-                const centerX = area.left + 75;
-                const centerY = area.top + 75;
-                joystick.current.x = (touch.clientX - centerX) / 75;
-                joystick.current.y = (touch.clientY - centerY) / 75;
+            const buySkin = (color, price) => {
+                if (coins >= price) {
+                    setCoins(c => c - price);
+                    setSkin(color);
+                }
             };
 
-            if (view === 'menu') {
-                return (
-                    <div className="h-screen flex flex-col items-center justify-center bg-sky-500">
-                        <h1 className="text-white text-6xl mb-10 drop-shadow-2xl italic uppercase">Blox Adventure</h1>
-                        <button className="bg-green-500 text-white text-4xl px-16 py-8 rounded-3xl border-b-8 border-green-700 active:translate-y-2 active:border-b-2 transition-all"
-                                onClick={() => setView('game')}>¡ENTRAR!</button>
-                    </div>
-                );
-            }
+            const buyHouse = () => {
+                if (coins >= 100 && !hasHouse) {
+                    setCoins(c => c - 100);
+                    setHasHouse(true);
+                }
+            };
+
+            if (view === 'menu') return (
+                <div className="h-screen flex flex-col items-center justify-center bg-sky-500 text-white">
+                    <h1 className="text-6xl mb-10 italic">BLOX LIFE</h1>
+                    <button className="bg-green-500 px-20 py-8 rounded-3xl text-4xl border-b-8 border-green-700" onClick={() => setView('game')}>JUGAR</button>
+                </div>
+            );
 
             return (
-                <div className="world" onTouchMove={handleMove} onMouseMove={handleMove} onMouseUp={handleEnd} onTouchEnd={handleEnd}>
-                    {/* El Suelo que se mueve */}
+                <div className="world" onMouseMove={(e) => {
+                    if (joystick.current.active) {
+                        const area = document.getElementById('joy').getBoundingClientRect();
+                        joystick.current.x = (e.clientX - (area.left + 70)) / 70;
+                        joystick.current.y = (e.clientY - (area.top + 70)) / 70;
+                    }
+                }} onMouseUp={() => joystick.current.active = false}>
+                    
+                    {/* UNIVERSO */}
                     <div className="floor" style={{ transform: `rotateX(60deg) translate3d(${pos.x}px, ${pos.y}px, 0)` }}>
-                        {/* Moneda en el suelo */}
-                        <div className="item-3d" style={{ left: 1000 + coinPos.x, top: 1000 + coinPos.y }}></div>
+                        <div className="item-3d" style={{ left: 2000 + coinPos.x, top: 2000 + coinPos.y }}></div>
+                        {hasHouse && (
+                            <div className="house" style={{ left: 1900, top: 1800 }}>
+                                <div className="roof"></div>
+                                <div className="absolute inset-0 border-4 border-black/20 flex items-end justify-center pb-2">
+                                    <div className="w-10 h-16 bg-brown-900 bg-[#5d4037]"></div>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
-                    {/* El Jugador (Cubo central) */}
-                    <div className="cube-player" style={{ transform: `rotateY(${joystick.current.x * 45}deg)` }}>
-                        <div className="side front flex flex-col items-center justify-center">
+                    {/* JUGADOR */}
+                    <div className="cube-player">
+                        <div className="side front flex flex-col items-center justify-center" style={{background: skin}}>
                             <div className="flex gap-4 mb-2"><div className="w-2 h-2 bg-black rounded-full"></div><div className="w-2 h-2 bg-black rounded-full"></div></div>
                             <div className="w-6 h-2 bg-black rounded-full"></div>
                         </div>
-                        <div className="side back"></div>
-                        <div className="side right"></div>
-                        <div className="side left"></div>
-                        <div className="side top"></div>
+                        <div className="side top" style={{background: skin}}></div>
                     </div>
 
-                    {/* UI Overlay */}
-                    <div className="ui h-full flex flex-col justify-between p-6">
-                        <div className="bg-yellow-400 border-4 border-white self-center px-10 py-2 rounded-full shadow-2xl pointer-events-auto">
-                            <span className="text-white text-4xl font-bold tracking-tighter">⭐ {coins}</span>
+                    {/* INTERFAZ (UI) */}
+                    <div className="absolute top-0 w-full p-6 flex justify-between items-start pointer-events-none">
+                        <div className="bg-yellow-400 border-4 border-white px-6 py-2 rounded-full text-white text-3xl shadow-xl pointer-events-auto">
+                            💰 {coins}
                         </div>
-                        <div id="joy" className="joy-area" onMouseDown={handleStart} onTouchStart={handleStart}>
+                        <div className="flex flex-col gap-2 pointer-events-auto">
+                            <button className="bg-purple-500 text-white p-4 rounded-2xl border-b-4 border-purple-800 font-bold" onClick={() => setView('shop')}>TIENDA 🛒</button>
+                            <button className="bg-red-500 text-white p-4 rounded-2xl border-b-4 border-red-800 font-bold" onClick={() => setView('menu')}>SALIR</button>
+                        </div>
+                    </div>
+
+                    {/* TIENDA (POPUP) */}
+                    {view === 'shop' && (
+                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center p-6 pointer-events-auto z-50">
+                            <div className="bg-white w-full max-w-sm rounded-[40px] p-8 relative">
+                                <h2 className="text-3xl text-center mb-6">TIENDA BLOX</h2>
+                                <div className="grid grid-cols-2 gap-4 mb-6">
+                                    <button onClick={() => buySkin('#3498db', 20)} className="bg-blue-400 p-4 rounded-2xl text-white font-bold border-b-4 border-blue-600">Skin Azul (20)</button>
+                                    <button onClick={() => buySkin('#e67e22', 20)} className="bg-orange-400 p-4 rounded-2xl text-white font-bold border-b-4 border-orange-600">Skin Naranja (20)</button>
+                                    <button onClick={() => buySkin('#9b59b6', 40)} className="bg-purple-400 p-4 rounded-2xl text-white font-bold border-b-4 border-purple-600">Skin Pro (40)</button>
+                                    <button onClick={buyHouse} className={`${hasHouse ? 'bg-gray-400' : 'bg-red-500'} p-4 rounded-2xl text-white font-bold border-b-4 border-red-800`}>
+                                        {hasHouse ? 'CASA COMPRADA' : 'CASA (100)'}
+                                    </button>
+                                </div>
+                                <button className="w-full bg-green-500 text-white py-4 rounded-2xl font-bold" onClick={() => setView('game')}>VOLVER A JUGAR</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* CONTROLES */}
+                    <div className="absolute bottom-10 left-10 pointer-events-auto">
+                        <div id="joy" className="joy-area" 
+                             onMouseDown={() => joystick.current.active = true}
+                             onTouchStart={() => joystick.current.active = true}
+                             onTouchMove={(e) => {
+                                 const area = document.getElementById('joy').getBoundingClientRect();
+                                 const touch = e.touches[0];
+                                 joystick.current.x = (touch.clientX - (area.left + 70)) / 70;
+                                 joystick.current.y = (touch.clientY - (area.top + 70)) / 70;
+                             }}
+                             onTouchEnd={() => joystick.current.active = false}>
                             <div className="stick" style={{ transform: `translate(${joystick.current.x * 40}px, ${joystick.current.y * 40}px)` }}></div>
                         </div>
                     </div>
-                    <button className="absolute top-5 left-5 bg-red-500 text-white p-3 rounded-xl border-b-4 border-red-800 pointer-events-auto" onClick={() => setView('menu')}>SALIR</button>
                 </div>
             );
         };
