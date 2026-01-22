@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Blox Adventure Kids</title>
+    <title>Blox Adventure World</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -14,9 +14,9 @@
         
         body {
             font-family: 'Fredoka', sans-serif;
-            background-color: #00A2FF; /* Azul clásico Roblox */
+            background-color: #00A2FF; /* Azul cielo Roblox */
             overflow: hidden;
-            touch-action: manipulation;
+            touch-action: none; /* Evita zoom y scroll accidental en móviles */
         }
 
         .blox-button {
@@ -30,31 +30,67 @@
             border-bottom-width: 2px;
         }
 
-        .floating {
-            animation: floating 3s ease-in-out infinite;
+        /* Estilo para los bloques del mapa */
+        .game-block {
+            background-color: #5cb85c; /* Verde pasto */
+            border-bottom: 3px solid #4a9d4a;
+            position: absolute;
+            box-shadow: 0 4px 0 rgba(0,0,0,0.1);
         }
 
-        @keyframes floating {
+        .coin-item {
+            position: absolute;
+            animation: bounce 1.2s infinite ease-in-out;
+            cursor: pointer;
+        }
+
+        @keyframes bounce {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-10px); }
         }
 
-        .coin-pop {
-            animation: coin-pop 0.5s ease-out;
+        /* Animación para monedas al recoger */
+        .coin-collected-anim {
+            animation: fade-up 0.4s forwards ease-out;
+        }
+        @keyframes fade-up {
+            0% { transform: translateY(0) scale(1); opacity: 1; }
+            100% { transform: translateY(-30px) scale(1.5); opacity: 0; }
         }
 
-        @keyframes coin-pop {
-            0% { transform: scale(1); opacity: 1; }
-            100% { transform: scale(2) translateY(-50px); opacity: 0; }
+        /* Avatar de bloques */
+        .player-avatar {
+            width: 40px; height: 60px;
+            background-color: #f0ad4e; /* Naranja */
+            border: 2px solid #d9534f;
+            position: absolute;
+            bottom: 20px; /* Posición inicial */
+            left: calc(50% - 20px);
+            transform-origin: bottom center;
+            animation: walk-idle 1s infinite alternate;
+            z-index: 10;
         }
 
-        /* Estilo de barra de progreso */
-        .xp-bar {
-            height: 20px;
-            background: #e2e8f0;
-            border-radius: 10px;
-            border: 3px solid white;
-            box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+        /* Simulación de movimiento */
+        @keyframes walk-idle {
+            0% { transform: translateY(0); }
+            100% { transform: translateY(-2px); }
+        }
+
+        .joystick-base {
+            background-color: rgba(255,255,255,0.2);
+            border: 2px solid rgba(255,255,255,0.4);
+            position: absolute;
+            border-radius: 50%;
+        }
+
+        .joystick-handle {
+            background-color: rgba(255,255,255,0.7);
+            border: 2px solid rgba(255,255,255,0.9);
+            position: absolute;
+            border-radius: 50%;
+            cursor: grab;
+            touch-action: none;
         }
     </style>
 </head>
@@ -62,107 +98,292 @@
     <div id="root"></div>
 
     <script type="text/babel">
-        const { useState, useEffect } = React;
+        const { useState, useEffect, useRef, useCallback } = React;
+
+        const MAP_SIZE = 10; // Tamaño del mapa en bloques
+        const BLOCK_PIXEL_SIZE = 60; // Tamaño de cada bloque en pixeles
+        const PLAYER_SIZE = { width: 40, height: 60 };
+
+        // Genera un mapa de bloques simple
+        const generateMap = () => {
+            const map = [];
+            for (let y = 0; y < MAP_SIZE; y++) {
+                for (let x = 0; x < MAP_SIZE; x++) {
+                    map.push({ x, y, type: 'ground' });
+                }
+            }
+            return map;
+        };
+
+        // Genera monedas aleatoriamente
+        const generateCoins = () => {
+            const coins = [];
+            for (let i = 0; i < 5; i++) { // 5 monedas iniciales
+                coins.push({
+                    id: Date.now() + i,
+                    x: Math.floor(Math.random() * (MAP_SIZE - 2)) + 1, // Evitar bordes
+                    y: Math.floor(Math.random() * (MAP_SIZE - 2)) + 1,
+                    collected: false
+                });
+            }
+            return coins;
+        };
 
         const App = () => {
-            const [coins, setCoins] = useState(100);
-            const [level, setLevel] = useState(1);
-            const [xp, setXp] = useState(40);
-            const [view, setView] = useState('main');
+            const [coins, setCoins] = useState(0);
+            const [view, setView] = useState('menu'); // 'menu' o 'game'
+            const [playerPos, setPlayerPos] = useState({ x: MAP_SIZE / 2, y: MAP_SIZE / 2 });
+            const [gameCoins, setGameCoins] = useState(generateCoins());
+            const [collectedAnimations, setCollectedAnimations] = useState([]); // Para animar monedas recogidas
 
-            const addCoin = () => {
-                setCoins(c => c + 10);
-                if (xp >= 90) {
-                    setXp(0);
-                    setLevel(l => l + 1);
-                } else {
-                    setXp(x => x + 10);
+            const gameAreaRef = useRef(null);
+            const joystickBaseRef = useRef(null);
+            const joystickHandleRef = useRef(null);
+            const isDragging = useRef(false);
+            const animationFrameRef = useRef(null);
+            const joystickCenter = useRef({ x: 0, y: 0 });
+            const moveDirection = useRef({ x: 0, y: 0 });
+            const playerSpeed = 0.15; // Velocidad de movimiento del jugador
+
+            // Lógica del Joystick
+            const startDrag = useCallback((e) => {
+                isDragging.current = true;
+                const touch = e.touches ? e.touches[0] : e;
+                const rect = joystickBaseRef.current.getBoundingClientRect();
+                joystickCenter.current = {
+                    x: rect.left + rect.width / 2,
+                    y: rect.top + rect.height / 2
+                };
+                joystickHandleRef.current.style.left = `${touch.clientX - rect.left - joystickHandleRef.current.offsetWidth / 2}px`;
+                joystickHandleRef.current.style.top = `${touch.clientY - rect.top - joystickHandleRef.current.offsetHeight / 2}px`;
+            }, []);
+
+            const onDrag = useCallback((e) => {
+                if (!isDragging.current) return;
+                const touch = e.touches ? e.touches[0] : e;
+                const rect = joystickBaseRef.current.getBoundingClientRect();
+                const handleRect = joystickHandleRef.current.getBoundingClientRect();
+
+                let x = touch.clientX - joystickCenter.current.x;
+                let y = touch.clientY - joystickCenter.current.y;
+
+                const distance = Math.sqrt(x * x + y * y);
+                const maxDistance = rect.width / 2 - handleRect.width / 2;
+
+                if (distance > maxDistance) {
+                    x = (x / distance) * maxDistance;
+                    y = (y / distance) * maxDistance;
                 }
-            };
+                
+                joystickHandleRef.current.style.left = `${x + rect.width / 2 - handleRect.width / 2}px`;
+                joystickHandleRef.current.style.top = `${y + rect.height / 2 - handleRect.height / 2}px`;
+
+                moveDirection.current = {
+                    x: x / maxDistance, // Normalizar entre -1 y 1
+                    y: y / maxDistance
+                };
+            }, []);
+
+            const endDrag = useCallback(() => {
+                isDragging.current = false;
+                joystickHandleRef.current.style.left = '50%';
+                joystickHandleRef.current.style.top = '50%';
+                moveDirection.current = { x: 0, y: 0 };
+            }, []);
+
+            // Game loop para el movimiento del jugador y detección de monedas
+            useEffect(() => {
+                if (view !== 'game') return;
+
+                const updateGame = () => {
+                    setPlayerPos(prevPos => {
+                        let newX = prevPos.x + moveDirection.current.x * playerSpeed;
+                        let newY = prevPos.y + moveDirection.current.y * playerSpeed;
+
+                        // Limitar al mapa
+                        newX = Math.max(0, Math.min(MAP_SIZE - 1, newX));
+                        newY = Math.max(0, Math.min(MAP_SIZE - 1, newY));
+
+                        // Detección de colisiones con monedas
+                        setGameCoins(currentCoins => 
+                            currentCoins.map(coin => {
+                                const playerGridX = Math.floor(newX);
+                                const playerGridY = Math.floor(newY);
+                                if (!coin.collected && playerGridX === coin.x && playerGridY === coin.y) {
+                                    setCoins(c => c + 1); // Recoge 1 moneda
+                                    
+                                    // Añadir animación de texto flotante
+                                    const animId = Date.now();
+                                    setCollectedAnimations(prev => [...prev, {
+                                        id: animId,
+                                        x: coin.x * BLOCK_PIXEL_SIZE,
+                                        y: coin.y * BLOCK_PIXEL_SIZE
+                                    }]);
+                                    setTimeout(() => {
+                                        setCollectedAnimations(prev => prev.filter(a => a.id !== animId));
+                                    }, 400); // Duración de la animación
+
+                                    return { ...coin, collected: true };
+                                }
+                                return coin;
+                            })
+                        );
+                        // Repoblar monedas si se acaban
+                        if (currentCoins.every(coin => coin.collected)) {
+                            setGameCoins(generateCoins());
+                        }
+
+                        return { x: newX, y: newY };
+                    });
+                    animationFrameRef.current = requestAnimationFrame(updateGame);
+                };
+
+                animationFrameRef.current = requestAnimationFrame(updateGame);
+                return () => cancelAnimationFrame(animationFrameRef.current);
+            }, [view, gameCoins]); // Dependencia de gameCoins para repoblar
+
+            // Inicializar/resetear el juego al cambiar a la vista de juego
+            useEffect(() => {
+                if (view === 'game') {
+                    setPlayerPos({ x: MAP_SIZE / 2, y: MAP_SIZE / 2 });
+                    setGameCoins(generateCoins());
+                    setCoins(0); // Resetear monedas al inicio del juego
+                }
+            }, [view]);
 
             return (
-                <div className="h-screen w-full max-w-md mx-auto relative overflow-hidden flex flex-col bg-sky-400">
+                <div className="h-screen w-full max-w-md mx-auto relative overflow-hidden flex flex-col bg-sky-400 border-x-4 border-white/20">
                     
-                    {/* BARRA SUPERIOR - STATUS */}
-                    <div className="absolute top-0 w-full p-4 flex justify-between items-start z-20 pointer-events-none">
-                        <div className="flex flex-col gap-2">
-                            {/* Nivel */}
-                            <div className="bg-white/90 p-1 px-4 rounded-full border-4 border-white shadow-lg pointer-events-auto">
-                                <span className="text-blue-600 font-bold text-lg">NIVEL {level}</span>
-                            </div>
-                            {/* Barra XP */}
-                            <div className="xp-bar w-32 overflow-hidden pointer-events-auto">
-                                <div className="bg-green-400 h-full transition-all duration-300" style={{width: `${xp}%`}}></div>
-                            </div>
-                        </div>
-
-                        {/* Monedas */}
-                        <div className="bg-yellow-400 p-2 px-4 rounded-full border-4 border-white shadow-lg flex items-center gap-2 pointer-events-auto">
-                            <span className="text-white text-xl font-bold">💰 {coins}</span>
+                    {/* HUD - MONEDAS */}
+                    <div className="absolute top-4 right-4 z-50">
+                        <div className="bg-yellow-400 p-2 px-6 rounded-full border-4 border-white shadow-xl flex items-center gap-2">
+                            <span className="text-white text-2xl font-bold tracking-tighter">💰 {coins}</span>
                         </div>
                     </div>
 
-                    {/* ESCENA PRINCIPAL */}
-                    <div className="flex-1 flex flex-col items-center justify-center p-6 text-center">
-                        {view === 'main' && (
-                            <div className="space-y-8">
-                                <div className="floating">
-                                    <div className="w-48 h-48 bg-white/30 rounded-full flex items-center justify-center border-8 border-white/20">
-                                        <img 
-                                            src="https://api.dicebear.com/7.x/bottts/svg?seed=blox&backgroundColor=ffffff00" 
-                                            alt="Mascota" 
-                                            className="w-40 h-40"
-                                        />
-                                    </div>
-                                </div>
-                                
-                                <h1 className="text-white text-4xl font-bold tracking-tight drop-shadow-md">
-                                    ¡HOLA ADVENTURER!
-                                </h1>
+                    {/* VISTA: MENÚ PRINCIPAL */}
+                    {view === 'menu' && (
+                        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center">
+                            <div className="mb-10 animate-bounce">
+                                <img src="https://api.dicebear.com/7.x/bottts/svg?seed=game&backgroundColor=ffffff00" className="w-48 h-48 drop-shadow-2xl" />
+                            </div>
+                            <h1 className="text-white text-5xl font-bold mb-8 drop-shadow-lg italic">BLOX WORLD!</h1>
+                            <button 
+                                onClick={() => setView('game')}
+                                className="blox-button bg-green-500 hover:bg-green-400 text-white text-4xl font-bold py-6 px-16 rounded-[40px] shadow-2xl uppercase tracking-wider"
+                            >
+                                ¡JUGAR!
+                            </button>
+                        </div>
+                    )}
 
-                                <button 
-                                    onClick={addCoin}
-                                    className="blox-button bg-green-500 hover:bg-green-400 text-white text-3xl font-bold py-6 px-12 rounded-3xl w-full max-w-xs uppercase"
+                    {/* VISTA: JUEGO EN VIVO */}
+                    {view === 'game' && (
+                        <div 
+                            ref={gameAreaRef} 
+                            className="flex-1 relative w-full h-full bg-[#82D677] overflow-hidden" // Fondo de pasto
+                        >
+                            {/* Botón Salir */}
+                            <button 
+                                onClick={() => setView('menu')}
+                                className="absolute top-4 left-4 z-50 blox-button bg-red-500 text-white font-bold p-3 rounded-2xl border-red-700 text-sm"
+                            >
+                                SALIR
+                            </button>
+
+                            {/* El mapa de bloques */}
+                            {generateMap().map(block => (
+                                <div
+                                    key={`${block.x}-${block.y}`}
+                                    className="game-block"
+                                    style={{
+                                        width: BLOCK_PIXEL_SIZE,
+                                        height: BLOCK_PIXEL_SIZE,
+                                        left: block.x * BLOCK_PIXEL_SIZE,
+                                        top: block.y * BLOCK_PIXEL_SIZE,
+                                    }}
+                                ></div>
+                            ))}
+
+                            {/* Monedas en el juego */}
+                            {gameCoins.map(coin => !coin.collected && (
+                                <div
+                                    key={coin.id}
+                                    className="coin-item flex items-center justify-center text-3xl"
+                                    style={{
+                                        width: BLOCK_PIXEL_SIZE,
+                                        height: BLOCK_PIXEL_SIZE,
+                                        left: coin.x * BLOCK_PIXEL_SIZE,
+                                        top: coin.y * BLOCK_PIXEL_SIZE,
+                                        zIndex: 5
+                                    }}
                                 >
-                                    ¡JUGAR!
-                                </button>
-                            </div>
-                        )}
-
-                        {view === 'pets' && (
-                            <div className="w-full bg-white/90 rounded-[40px] p-6 border-8 border-white shadow-2xl">
-                                <h2 className="text-blue-500 text-2xl font-bold mb-4 uppercase">Mascotas</h2>
-                                <div className="grid grid-cols-2 gap-4">
-                                    {[1,2,3,4].map(i => (
-                                        <div key={i} className="bg-blue-100 p-4 rounded-3xl border-4 border-blue-200 flex flex-col items-center">
-                                            <img src={`https://api.dicebear.com/7.x/adventurer/svg?seed=${i*5}`} className="w-16 h-16 mb-2" />
-                                            <span className="text-blue-800 font-bold text-sm">AMIGO #{i}</span>
-                                        </div>
-                                    ))}
+                                    ⭐
                                 </div>
+                            ))}
+
+                            {/* Animaciones de monedas recogidas */}
+                            {collectedAnimations.map(anim => (
+                                <div
+                                    key={anim.id}
+                                    className="absolute text-yellow-300 font-bold text-lg coin-collected-anim"
+                                    style={{
+                                        left: anim.x + BLOCK_PIXEL_SIZE / 2,
+                                        top: anim.y + BLOCK_PIXEL_SIZE / 2,
+                                        zIndex: 20,
+                                        pointerEvents: 'none'
+                                    }}
+                                >
+                                    +1
+                                </div>
+                            ))}
+
+
+                            {/* Avatar del Jugador */}
+                            <div 
+                                className="player-avatar flex items-center justify-center text-white font-bold text-xs"
+                                style={{
+                                    left: playerPos.x * BLOCK_PIXEL_SIZE + (BLOCK_PIXEL_SIZE - PLAYER_SIZE.width) / 2,
+                                    top: playerPos.y * BLOCK_PIXEL_SIZE + (BLOCK_PIXEL_SIZE - PLAYER_SIZE.height) / 2,
+                                    width: PLAYER_SIZE.width,
+                                    height: PLAYER_SIZE.height
+                                }}
+                            >
+                                {/* Puedes poner una imagen de avatar aquí */}
                             </div>
-                        )}
-                    </div>
 
-                    {/* NAV BAR ESTILO ROBLOX */}
-                    <div className="p-6 pb-10 flex justify-around items-center bg-white/10 backdrop-blur-md rounded-t-[50px] border-t-8 border-white/20">
-                        <button onClick={() => setView('main')} className={`p-4 rounded-2xl transition-all ${view === 'main' ? 'bg-white scale-110 shadow-xl' : 'bg-white/40'}`}>
-                            <i data-lucide="home" className={`${view === 'main' ? 'text-blue-500' : 'text-white'}`}></i>
-                        </button>
-                        
-                        <button onClick={() => setView('pets')} className={`p-4 rounded-2xl transition-all ${view === 'pets' ? 'bg-white scale-110 shadow-xl' : 'bg-white/40'}`}>
-                            <i data-lucide="dog" className={`${view === 'pets' ? 'text-blue-500' : 'text-white'}`}></i>
-                        </button>
+                            {/* JOYSTICK */}
+                            <div 
+                                ref={joystickBaseRef}
+                                className="joystick-base w-32 h-32 bottom-8 left-8"
+                                onPointerDown={startDrag} 
+                                onPointerMove={onDrag} 
+                                onPointerUp={endDrag} 
+                                onPointerLeave={endDrag}
+                                onTouchStart={startDrag}
+                                onTouchMove={onDrag}
+                                onTouchEnd={endDrag}
+                                style={{ transform: 'translate(-50%, -50%)', left: '20%', bottom: '20%' }} // Posición fija
+                            >
+                                <div 
+                                    ref={joystickHandleRef}
+                                    className="joystick-handle w-12 h-12 absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2"
+                                ></div>
+                            </div>
+                        </div>
+                    )}
 
-                        <button className="bg-red-500 p-4 rounded-2xl blox-button border-red-700">
-                            <i data-lucide="shopping-cart" className="text-white"></i>
-                        </button>
-
-                        <button className="bg-yellow-500 p-4 rounded-2xl blox-button border-yellow-700">
-                            <i data-lucide="trophy" className="text-white"></i>
-                        </button>
-                    </div>
-
+                    {/* PIE DE PÁGINA (Solo en menú) */}
+                    {view === 'menu' && (
+                        <div className="p-6 pb-12 bg-white/10 flex justify-around rounded-t-[50px] border-t-8 border-white/20">
+                            <button className="bg-blue-500 p-4 rounded-3xl blox-button border-blue-700">
+                                <i data-lucide="user" className="text-white"></i>
+                            </button>
+                            <button className="bg-purple-500 p-4 rounded-3xl blox-button border-purple-700">
+                                <i data-lucide="shopping-bag" className="text-white"></i>
+                            </button>
+                        </div>
+                    )}
                 </div>
             );
         };
