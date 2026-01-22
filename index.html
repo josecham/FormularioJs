@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Blox Motion Tycoon</title>
+    <title>Blox Universe Gold</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -12,7 +12,8 @@
         @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@700&display=swap');
         body { font-family: 'Fredoka', sans-serif; background: #00A2FF; margin: 0; overflow: hidden; touch-action: none; }
         
-        .world { perspective: 1200px; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+        /* Escena 3D */
+        .world { perspective: 1000px; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
         .floor { 
             width: 4000px; height: 4000px; background-color: #7cfc00;
             background-image: repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(0,0,0,0.1) 40px),
@@ -20,16 +21,21 @@
             transform: rotateX(60deg); position: absolute;
         }
 
-        .cube-player { position: absolute; width: 50px; height: 80px; transform-style: preserve-3d; z-index: 10; transition: transform 0.1s; }
+        /* Personaje con Salto */
+        .player-container { position: absolute; width: 50px; height: 80px; transform-style: preserve-3d; transition: bottom 0.2s; z-index: 20; }
+        .cube-player { width: 100%; height: 100%; transform-style: preserve-3d; }
         .side { position: absolute; width: 100%; height: 100%; border: 2px solid rgba(0,0,0,0.1); background: #FFD966; }
         .front { transform: translateZ(25px); }
         .top { height: 50px; transform: rotateX(90deg) translateZ(25px); }
 
-        .house-obj { position: absolute; width: 200px; height: 150px; background: #e74c3c; transform: translate3d(200px, -400px, 0); transform-style: preserve-3d; border: 4px solid #c0392b; }
-        .door { position: absolute; bottom: 0; left: 70px; width: 60px; height: 80px; background: #f1c40f; }
+        /* Casa */
+        .house-box { position: absolute; width: 200px; height: 150px; background: #e74c3c; transform: translate3d(300px, -300px, 0); transform-style: preserve-3d; border: 4px solid #c0392b; }
+        .door-yellow { position: absolute; bottom: 0; left: 70px; width: 60px; height: 80px; background: #f1c40f; border: 4px solid #d4ac0d; }
 
-        .interior-bg { width: 85vw; height: 60vh; background: #fdf2f0; border: 10px solid #5d4037; border-radius: 40px; position: relative; }
-        .furniture-item { position: absolute; width: 70px; height: 70px; font-size: 50px; }
+        /* Controles */
+        .joy-base { width: 120px; height: 120px; background: rgba(255,255,255,0.2); border-radius: 50%; position: relative; border: 3px solid rgba(255,255,255,0.4); }
+        .joy-stick { width: 50px; height: 50px; background: white; border-radius: 50%; position: absolute; top: 35px; left: 35px; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
+        .jump-btn { width: 80px; height: 80px; background: rgba(255,255,255,0.4); border-radius: 50%; border: 4px solid white; display: flex; align-items: center; justify-content: center; font-size: 30px; color: white; }
     </style>
 </head>
 <body>
@@ -39,134 +45,130 @@
         const { useState, useEffect, useRef } = React;
 
         const App = () => {
-            const [view, setView] = useState('menu'); 
+            const [view, setView] = useState('world'); 
             const [coins, setCoins] = useState(150); 
             const [pos, setPos] = useState({ x: 0, y: 0 });
-            const [coinPos, setCoinPos] = useState({ x: 100, y: -200 });
-            const [placedItems, setPlacedItems] = useState([]);
+            const [isJumping, setIsJumping] = useState(false);
             const [hasHouse, setHasHouse] = useState(false);
             const [isNearHouse, setIsNearHouse] = useState(false);
-            const [motionActive, setMotionActive] = useState(false);
+            const [placedItems, setPlacedItems] = useState([]);
             
-            const motion = useRef({ x: 0, y: 0 });
-            const dragItem = useRef(null);
+            const joyData = useRef({ x: 0, y: 0, active: false });
+            const coinPos = useRef({ x: 100, y: -100 });
 
-            // Activar sensores del celular
-            const startMotion = () => {
-                if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                    DeviceOrientationEvent.requestPermission()
-                        .then(permissionState => {
-                            if (permissionState === 'granted') {
-                                window.addEventListener('deviceorientation', handleOrientation);
-                                setMotionActive(true);
-                                setView('world');
-                            }
-                        });
-                } else {
-                    window.addEventListener('deviceorientation', handleOrientation);
-                    setMotionActive(true);
-                    setView('world');
-                }
-            };
-
-            const handleOrientation = (event) => {
-                // beta: inclinación adelante/atrás (-90 a 90)
-                // gamma: inclinación izquierda/derecha (-90 a 90)
-                const x = event.gamma / 20; // Sensibilidad
-                const y = (event.beta - 45) / 20; // Ajustamos 45 grados como posición cómoda
-                motion.current = { x: Math.max(-1, Math.min(1, x)), y: Math.max(-1, Math.min(1, y)) };
-            };
-
+            // Ciclo de juego
             useEffect(() => {
-                const loop = () => {
-                    if (motionActive && view === 'world') {
+                const gameLoop = () => {
+                    if (joyData.current.active && view === 'world') {
                         setPos(prev => {
-                            const nX = prev.x - motion.current.x * 12;
-                            const nY = prev.y - motion.current.y * 12;
-                            
-                            if (Math.sqrt(Math.pow(nX + coinPos.x, 2) + Math.pow(nY + coinPos.y, 2)) < 60) {
-                                setCoins(c => c + 25);
-                                setCoinPos({ x: Math.random() * 800 - 400, y: Math.random() * 800 - 400 });
+                            const nX = prev.x - joyData.current.x * 10;
+                            const nY = prev.y - joyData.current.y * 10;
+
+                            // Colisión Moneda
+                            const dCoin = Math.sqrt(Math.pow(nX + coinPos.current.x, 2) + Math.pow(nY + coinPos.current.y, 2));
+                            if (dCoin < 60) {
+                                setCoins(c => c + 20);
+                                coinPos.current = { x: Math.random() * 800 - 400, y: Math.random() * 800 - 400 };
                             }
-                            
-                            const distToHouse = Math.sqrt(Math.pow(nX + 200, 2) + Math.pow(nY - 400, 2));
-                            setIsNearHouse(hasHouse && distToHouse < 150);
+
+                            // Cerca de la casa
+                            const dHouse = Math.sqrt(Math.pow(nX + 300, 2) + Math.pow(nY - 300, 2));
+                            setIsNearHouse(hasHouse && dHouse < 150);
 
                             return { x: nX, y: nY };
                         });
                     }
-                    requestAnimationFrame(loop);
+                    requestAnimationFrame(gameLoop);
                 };
-                requestAnimationFrame(loop);
-            }, [view, motionActive, hasHouse, coinPos]);
+                requestAnimationFrame(gameLoop);
+            }, [view, hasHouse]);
 
-            if (view === 'menu') return (
-                <div className="h-screen flex flex-col items-center justify-center bg-sky-500 p-6 text-center">
-                    <h1 className="text-white text-5xl mb-12 italic">BLOX MOTION</h1>
-                    <p className="text-white mb-6">Mueve tu celular para caminar</p>
-                    <button className="bg-green-500 text-white text-3xl px-12 py-6 rounded-3xl border-b-8 border-green-700" onClick={startMotion}>¡ACTIVAR Y JUGAR!</button>
-                </div>
-            );
+            const jump = () => {
+                if (!isJumping) {
+                    setIsJumping(true);
+                    setTimeout(() => setIsJumping(false), 400);
+                }
+            };
+
+            const handleJoy = (e) => {
+                const rect = document.getElementById('joy-ui').getBoundingClientRect();
+                const touch = e.touches ? e.touches[0] : e;
+                const centerX = rect.left + 60;
+                const centerY = rect.top + 60;
+                const dist = Math.min(50, Math.sqrt(Math.pow(touch.clientX - centerX, 2) + Math.pow(touch.clientY - centerY, 2)));
+                const angle = Math.atan2(touch.clientY - centerY, touch.clientX - centerX);
+                joyData.current.x = (Math.cos(angle) * dist) / 50;
+                joyData.current.y = (Math.sin(angle) * dist) / 50;
+            };
 
             return (
-                <div className="h-screen w-full relative flex items-center justify-center bg-sky-400">
+                <div className="h-screen w-full relative overflow-hidden bg-sky-400">
                     
-                    {view === 'world' && (
+                    {view === 'world' ? (
                         <div className="world">
+                            {/* Suelo */}
                             <div className="floor" style={{ transform: `rotateX(60deg) translate3d(${pos.x}px, ${pos.y}px, 0)` }}>
-                                <div className="absolute w-12 h-12 bg-yellow-400 rounded-full border-4 border-white flex items-center justify-center shadow-lg" style={{ left: 2000 + coinPos.x, top: 2000 + coinPos.y }}>⭐</div>
-                                {hasHouse && <div className="house-obj" style={{ left: 1900, top: 1800 }}><div className="door"></div></div>}
+                                <div className="absolute w-12 h-12 bg-yellow-400 rounded-full border-4 border-white flex items-center justify-center text-xl shadow-lg" 
+                                     style={{ left: 2000 + coinPos.current.x, top: 2000 + coinPos.current.y }}>⭐</div>
+                                
+                                {hasHouse && (
+                                    <div className="house-box" style={{ left: 1900, top: 1800 }}>
+                                        <div className="door-yellow"></div>
+                                        <div className="absolute -top-12 w-full text-center text-white text-xl">CASA DE {coins > 500 ? 'PRO' : 'NOOB'}</div>
+                                    </div>
+                                )}
                             </div>
-                            
-                            <div className="cube-player" style={{ transform: `rotateY(${motion.current.x * 30}deg)` }}>
-                                <div className="side front flex flex-col items-center justify-center">
-                                    <div className="flex gap-4 mb-2"><div className="w-2 h-2 bg-black rounded-full"></div><div className="w-2 h-2 bg-black rounded-full"></div></div>
-                                    <div className="w-6 h-2 bg-black rounded-full"></div>
+
+                            {/* Jugador con Salto */}
+                            <div className="player-container" style={{ bottom: isJumping ? '55%' : '45%', transform: `rotateY(${joyData.current.x * 40}deg)` }}>
+                                <div className="cube-player">
+                                    <div className="side front flex flex-col items-center justify-center">
+                                        <div className="flex gap-4 mb-2"><div className="w-2 h-2 bg-black rounded-full"></div><div className="w-2 h-2 bg-black rounded-full"></div></div>
+                                        <div className="w-6 h-2 bg-black rounded-full"></div>
+                                    </div>
+                                    <div className="side top"></div>
                                 </div>
-                                <div className="side top"></div>
                             </div>
 
+                            {/* Botón Entrar */}
                             {isNearHouse && (
-                                <button className="absolute bottom-20 bg-yellow-400 text-blue-900 text-2xl font-bold px-12 py-6 rounded-full animate-bounce pointer-events-auto shadow-2xl"
-                                        onClick={() => setView('house')}>
-                                    🚪 ENTRAR
-                                </button>
+                                <button className="absolute top-1/2 bg-yellow-400 p-6 rounded-full font-bold text-2xl border-4 border-white shadow-2xl animate-pulse z-50 pointer-events-auto"
+                                        onClick={() => setView('house')}>ENTRAR A CASA 🏠</button>
                             )}
+
+                            {/* Controles de Juego */}
+                            <div className="absolute bottom-10 w-full px-10 flex justify-between items-center pointer-events-none">
+                                <div id="joy-ui" className="joy-base pointer-events-auto"
+                                     onTouchStart={() => joyData.current.active = true}
+                                     onTouchMove={handleJoy}
+                                     onTouchEnd={() => {joyData.current.active = false; joyData.current.x = 0; joyData.current.y = 0;}}>
+                                    <div className="joy-stick" style={{ transform: `translate(${joyData.current.x * 35}px, ${joyData.current.y * 35}px)` }}></div>
+                                </div>
+                                <div className="jump-btn pointer-events-auto active:scale-90 transition-transform" onClick={jump}>⬆️</div>
+                            </div>
+                        </div>
+                    ) : (
+                        /* VISTA INTERIOR */
+                        <div className="flex flex-col items-center gap-6 p-4 w-full h-full">
+                            <h2 className="text-white text-4xl mt-10">INTERIOR 🏠</h2>
+                            <div className="w-full h-3/5 bg-orange-100 border-8 border-orange-900 rounded-[50px] relative overflow-hidden shadow-inner">
+                                {placedItems.map(it => <div key={it.id} className="absolute text-6xl" style={{left: it.x, top: it.y}}>{it.emoji}</div>)}
+                            </div>
+                            <div className="flex gap-4 overflow-x-auto w-full p-2 bg-black/20 rounded-xl">
+                                <button onClick={() => {if(coins>=30){setCoins(coins-30); setPlacedItems([...placedItems,{id:Date.now(),emoji:'🛋️',x:100,y:100}])}}} className="bg-white p-4 rounded-xl min-w-[100px]">Sillón $30</button>
+                                <button onClick={() => {if(coins>=60){setCoins(coins-60); setPlacedItems([...placedItems,{id:Date.now(),emoji:'📺',x:150,y:150}])}}} className="bg-white p-4 rounded-xl min-w-[100px]">Tele $60</button>
+                            </div>
+                            <button className="bg-red-500 text-white px-12 py-4 rounded-full font-bold text-2xl" onClick={() => {setView('world'); setPos({x:0,y:0});}}>SALIR</button>
                         </div>
                     )}
 
-                    {view === 'house' && (
-                        <div className="flex flex-col items-center gap-4 w-full">
-                            <div className="interior-bg shadow-2xl" onMouseMove={(e) => {
-                                if (dragItem.current) {
-                                    const rect = e.currentTarget.getBoundingClientRect();
-                                    const t = e.touches ? e.touches[0] : e;
-                                    setPlacedItems(prev => prev.map(item => item.id === dragItem.current ? { ...item, x: t.clientX - rect.left - 35, y: t.clientY - rect.top - 35 } : item));
-                                }
-                            }} onTouchMove={(e) => {
-                                if (dragItem.current) {
-                                    const rect = e.currentTarget.getBoundingClientRect();
-                                    const t = e.touches[0];
-                                    setPlacedItems(prev => prev.map(item => item.id === dragItem.current ? { ...item, x: t.clientX - rect.left - 35, y: t.clientY - rect.top - 35 } : item));
-                                }} onMouseUp={() => dragItem.current = null} onTouchEnd={() => dragItem.current = null}>
-                                {placedItems.map(item => (
-                                    <div key={item.id} className="furniture-item" onMouseDown={() => dragItem.current = item.id} onTouchStart={() => dragItem.current = item.id} style={{ left: item.x, top: item.y }}>{item.emoji}</div>
-                                ))}
-                            </div>
-                            <div className="flex gap-2">
-                                <button onClick={() => { if(coins>=20){setCoins(coins-20); setPlacedItems([...placedItems,{id:Date.now(),emoji:'🛋️',x:50,y:50}])}}} className="bg-white p-4 rounded-xl">🛋️ $20</button>
-                                <button onClick={() => setView('world')} className="bg-blue-600 text-white px-8 py-4 rounded-xl font-bold">SALIR</button>
-                            </div>
-                        </div>
-                    )}
-
-                    <div className="absolute top-6 left-6 bg-yellow-400 border-4 border-white px-6 py-2 rounded-full text-white text-2xl shadow-xl">
-                        💰 {coins}
+                    {/* UI TOP */}
+                    <div className="absolute top-6 left-6 flex flex-col gap-4 pointer-events-auto">
+                        <div className="bg-yellow-400 border-4 border-white px-6 py-2 rounded-full text-white text-2xl shadow-xl flex items-center gap-2">💰 {coins}</div>
+                        {!hasHouse && view === 'world' && (
+                            <button className="bg-red-500 text-white p-4 rounded-2xl font-bold border-b-4 border-red-800" onClick={() => {if(coins>=100){setCoins(coins-100); setHasHouse(true)}}}>COMPRAR CASA $100</button>
+                        )}
                     </div>
-
-                    {!hasHouse && view === 'world' && (
-                        <button className="absolute top-6 right-6 bg-red-500 text-white p-4 rounded-2xl font-bold shadow-lg" onClick={() => { if(coins >= 100) {setCoins(coins-100); setHasHouse(true);}}}>CASA ($100)</button>
-                    )}
                 </div>
             );
         };
