@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Blox Home Decorator</title>
+    <title>Blox Life Simulator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -13,35 +13,34 @@
         body { font-family: 'Fredoka', sans-serif; background: #00A2FF; margin: 0; overflow: hidden; touch-action: none; }
         
         /* Escena 3D */
-        .world { perspective: 1200px; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; overflow: hidden;}
-        
-        /* El Suelo */
+        .world { perspective: 1200px; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
         .floor { 
             width: 4000px; height: 4000px; background-color: #7cfc00;
             background-image: repeating-linear-gradient(0deg, transparent, transparent 39px, rgba(0,0,0,0.05) 40px),
                               repeating-linear-gradient(90deg, transparent, transparent 39px, rgba(0,0,0,0.05) 40px);
-            transform: rotateX(60deg); position: absolute;
+            transform: rotateX(60deg); position: absolute; transition: transform 0.1s linear;
         }
 
-        /* Vista Interior (Casa) */
-        .interior {
-            width: 80vw; height: 60vh; background: #fdf2f0;
-            border: 10px solid #5d4037; border-radius: 20px;
-            position: relative; display: flex; flex-wrap: wrap; align-content: flex-start; gap: 10px; padding: 20px;
-        }
-
-        /* Muebles */
-        .furniture { width: 60px; height: 60px; display: flex; align-items: center; justify-content: center; font-size: 40px; border-radius: 10px; background: white; box-shadow: 0 4px 0 #ddd; }
-
-        /* Personaje */
-        .cube-player { position: absolute; width: 50px; height: 80px; transform-style: preserve-3d; z-index: 10; }
+        /* Personaje Personalizable */
+        .cube-player { position: absolute; width: 50px; height: 80px; transform-style: preserve-3d; transition: transform 0.1s; }
         .side { position: absolute; width: 100%; height: 100%; border: 2px solid rgba(0,0,0,0.1); }
         .front { transform: translateZ(25px); }
-        .top { height: 50px; transform: rotateX(90deg) translateZ(25px); }
+        .back  { transform: rotateY(180deg) translateZ(25px); filter: brightness(0.8); }
+        .top   { height: 50px; transform: rotateX(90deg) translateZ(25px); filter: brightness(1.1); }
 
-        .house { position: absolute; width: 150px; height: 120px; background: #e74c3c; transform: translate3d(200px, -400px, 0); transform-style: preserve-3d; }
-        .joy-area { width: 120px; height: 120px; background: rgba(255,255,255,0.3); border-radius: 50%; position: relative; pointer-events: auto; }
-        .stick { width: 50px; height: 50px; background: white; border-radius: 50%; position: absolute; top: 35px; left: 35px; }
+        /* La Casa */
+        .house {
+            position: absolute; width: 150px; height: 120px; background: #e74c3c;
+            transform: translate3d(200px, -400px, 50px); transform-style: preserve-3d;
+        }
+        .roof { 
+            position: absolute; width: 100%; height: 100%; background: #c0392b;
+            transform: translateY(-50px) rotateX(45deg); 
+        }
+
+        .item-3d { position: absolute; width: 30px; height: 30px; background: #FFD700; border-radius: 50%; border: 4px solid #B8860B; transform: rotateX(60deg); }
+        .joy-area { width: 140px; height: 140px; background: rgba(255,255,255,0.2); border-radius: 50%; position: relative; pointer-events: auto; }
+        .stick { width: 60px; height: 60px; background: white; border-radius: 50%; position: absolute; top: 40px; left: 40px; }
     </style>
 </head>
 <body>
@@ -51,131 +50,134 @@
         const { useState, useEffect, useRef } = React;
 
         const App = () => {
-            const [view, setView] = useState('menu'); // menu, world, house, shop
-            const [coins, setCoins] = useState(50);
+            const [view, setView] = useState('menu'); // menu, game, shop
+            const [coins, setCoins] = useState(0);
             const [pos, setPos] = useState({ x: 0, y: 0 });
-            const [coinPos, setCoinPos] = useState({ x: 0, y: -200 });
-            const [inventory, setInventory] = useState([]);
+            const [coinPos, setCoinPos] = useState({ x: 100, y: -200 });
+            const [skin, setSkin] = useState('#FFD966'); // Color por defecto
             const [hasHouse, setHasHouse] = useState(false);
             
             const joystick = useRef({ x: 0, y: 0, active: false });
-            const frame = useRef();
+            const requestRef = useRef();
 
             const update = () => {
-                if (joystick.current.active && view === 'world') {
+                if (joystick.current.active) {
                     setPos(prev => {
-                        const nX = prev.x - joystick.current.x * 12;
-                        const nY = prev.y - joystick.current.y * 12;
+                        const newX = prev.x - joystick.current.x * 12;
+                        const newY = prev.y - joystick.current.y * 12;
                         
-                        // Recoger monedas
-                        if (Math.sqrt(Math.pow(nX + coinPos.x, 2) + Math.pow(nY + coinPos.y, 2)) < 60) {
-                            setCoins(c => c + 20);
-                            setCoinPos({ x: Math.random() * 600 - 300, y: Math.random() * 600 - 300 });
+                        // Colisión moneda
+                        if (Math.sqrt(Math.pow(newX + coinPos.x, 2) + Math.pow(newY + coinPos.y, 2)) < 60) {
+                            setCoins(c => c + 10);
+                            setCoinPos({ x: Math.random() * 800 - 400, y: Math.random() * 800 - 400 });
                         }
-
-                        // Entrar a la casa (si está cerca de la posición de la casa)
-                        if (hasHouse && Math.sqrt(Math.pow(nX + 200, 2) + Math.pow(nY - 400, 2)) < 80) {
-                            joystick.current.active = false;
-                            setView('house');
-                        }
-
-                        return { x: nX, y: nY };
+                        return { x: newX, y: newY };
                     });
                 }
-                frame.current = requestAnimationFrame(update);
+                requestRef.current = requestAnimationFrame(update);
             };
 
             useEffect(() => {
-                frame.current = requestAnimationFrame(update);
-                return () => cancelAnimationFrame(frame.current);
-            }, [view, hasHouse, coinPos]);
+                requestRef.current = requestAnimationFrame(update);
+                return () => cancelAnimationFrame(requestRef.current);
+            }, [coinPos]);
 
-            const buyFurniture = (item, price) => {
+            const buySkin = (color, price) => {
                 if (coins >= price) {
                     setCoins(c => c - price);
-                    setInventory([...inventory, item]);
+                    setSkin(color);
+                }
+            };
+
+            const buyHouse = () => {
+                if (coins >= 100 && !hasHouse) {
+                    setCoins(c => c - 100);
+                    setHasHouse(true);
                 }
             };
 
             if (view === 'menu') return (
                 <div className="h-screen flex flex-col items-center justify-center bg-sky-500 text-white">
-                    <h1 className="text-6xl mb-10 italic drop-shadow-lg">BLOX DECOR</h1>
-                    <button className="bg-green-500 px-20 py-6 rounded-3xl text-4xl border-b-8 border-green-700" onClick={() => setView('world')}>JUGAR</button>
+                    <h1 className="text-6xl mb-10 italic">BLOX LIFE</h1>
+                    <button className="bg-green-500 px-20 py-8 rounded-3xl text-4xl border-b-8 border-green-700" onClick={() => setView('game')}>JUGAR</button>
                 </div>
             );
 
             return (
-                <div className="h-screen w-full relative flex items-center justify-center overflow-hidden">
+                <div className="world" onMouseMove={(e) => {
+                    if (joystick.current.active) {
+                        const area = document.getElementById('joy').getBoundingClientRect();
+                        joystick.current.x = (e.clientX - (area.left + 70)) / 70;
+                        joystick.current.y = (e.clientY - (area.top + 70)) / 70;
+                    }
+                }} onMouseUp={() => joystick.current.active = false}>
                     
-                    {/* MUNDO EXTERIOR */}
-                    {view === 'world' && (
-                        <div className="world">
-                            <div className="floor" style={{ transform: `rotateX(60deg) translate3d(${pos.x}px, ${pos.y}px, 0)` }}>
-                                <div className="absolute w-8 h-8 bg-yellow-400 rounded-full border-4 border-yellow-600" style={{ left: 2000 + coinPos.x, top: 2000 + coinPos.y }}></div>
-                                {hasHouse && <div className="house" style={{ left: 1850, top: 1800 }}><div className="absolute bottom-0 w-full h-10 bg-black/20 text-white text-center text-xs">ENTRADA</div></div>}
-                            </div>
-                            <div className="cube-player">
-                                <div className="side front bg-[#FFD966] flex flex-col items-center justify-center">
-                                    <div className="flex gap-4 mb-2"><div className="w-2 h-2 bg-black rounded-full"></div><div className="w-2 h-2 bg-black rounded-full"></div></div>
-                                    <div className="w-6 h-2 bg-black rounded-full"></div>
+                    {/* UNIVERSO */}
+                    <div className="floor" style={{ transform: `rotateX(60deg) translate3d(${pos.x}px, ${pos.y}px, 0)` }}>
+                        <div className="item-3d" style={{ left: 2000 + coinPos.x, top: 2000 + coinPos.y }}></div>
+                        {hasHouse && (
+                            <div className="house" style={{ left: 1900, top: 1800 }}>
+                                <div className="roof"></div>
+                                <div className="absolute inset-0 border-4 border-black/20 flex items-end justify-center pb-2">
+                                    <div className="w-10 h-16 bg-brown-900 bg-[#5d4037]"></div>
                                 </div>
-                                <div className="side top bg-[#FFD966]"></div>
                             </div>
-                        </div>
-                    )}
-
-                    {/* INTERIOR DE LA CASA */}
-                    {view === 'house' && (
-                        <div className="flex flex-col items-center gap-4">
-                            <h2 className="text-white text-3xl">MI CASITA 🏠</h2>
-                            <div className="interior shadow-2xl">
-                                {inventory.map((emoji, i) => <div key={i} className="furniture">{emoji}</div>)}
-                                {inventory.length === 0 && <p className="text-gray-400 w-full text-center mt-10">Tu casa está vacía...</p>}
-                            </div>
-                            <div className="flex gap-4">
-                                <button className="bg-purple-500 text-white px-8 py-4 rounded-2xl border-b-4 border-purple-800" onClick={() => setView('shop')}>COMPRAR MUEBLES</button>
-                                <button className="bg-blue-500 text-white px-8 py-4 rounded-2xl border-b-4 border-blue-800" onClick={() => {setView('world'); setPos({x:0, y:0})}}>SALIR AL MUNDO</button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* TIENDA DE MUEBLES */}
-                    {view === 'shop' && (
-                        <div className="absolute inset-0 bg-black/80 z-50 flex items-center justify-center p-6">
-                            <div className="bg-white w-full max-w-sm rounded-[40px] p-8">
-                                <h3 className="text-2xl font-bold mb-6 text-center">TIENDA DE MUEBLES</h3>
-                                <div className="grid grid-cols-2 gap-4 mb-6">
-                                    <button onClick={() => buyFurniture('🛋️', 30)} className="bg-gray-100 p-4 rounded-xl border-b-4 border-gray-300">Sillón (30)</button>
-                                    <button onClick={() => buyFurniture('🛏️', 50)} className="bg-gray-100 p-4 rounded-xl border-b-4 border-gray-300">Cama (50)</button>
-                                    <button onClick={() => buyFurniture('📺', 60)} className="bg-gray-100 p-4 rounded-xl border-b-4 border-gray-300">Tele (60)</button>
-                                    <button onClick={() => buyFurniture('🍕', 10)} className="bg-gray-100 p-4 rounded-xl border-b-4 border-gray-300">Pizza (10)</button>
-                                    {!hasHouse && <button onClick={() => { if(coins>=100){setCoins(coins-100); setHasHouse(true)} }} className="col-span-2 bg-red-500 text-white p-4 rounded-xl">COMPRAR CASA (100)</button>}
-                                </div>
-                                <button className="w-full bg-green-500 text-white py-4 rounded-2xl font-bold" onClick={() => setView('house')}>CERRAR</button>
-                            </div>
-                        </div>
-                    )}
-
-                    {/* UI GENERAL */}
-                    <div className="absolute top-6 left-6 bg-yellow-400 border-4 border-white px-6 py-2 rounded-full text-white text-2xl shadow-lg">
-                        💰 {coins}
+                        )}
                     </div>
 
-                    {/* JOYSTICK (Solo en el mundo) */}
-                    {view === 'world' && (
-                        <div className="absolute bottom-10 left-10 joy-area" id="joy"
+                    {/* JUGADOR */}
+                    <div className="cube-player">
+                        <div className="side front flex flex-col items-center justify-center" style={{background: skin}}>
+                            <div className="flex gap-4 mb-2"><div className="w-2 h-2 bg-black rounded-full"></div><div className="w-2 h-2 bg-black rounded-full"></div></div>
+                            <div className="w-6 h-2 bg-black rounded-full"></div>
+                        </div>
+                        <div className="side top" style={{background: skin}}></div>
+                    </div>
+
+                    {/* INTERFAZ (UI) */}
+                    <div className="absolute top-0 w-full p-6 flex justify-between items-start pointer-events-none">
+                        <div className="bg-yellow-400 border-4 border-white px-6 py-2 rounded-full text-white text-3xl shadow-xl pointer-events-auto">
+                            💰 {coins}
+                        </div>
+                        <div className="flex flex-col gap-2 pointer-events-auto">
+                            <button className="bg-purple-500 text-white p-4 rounded-2xl border-b-4 border-purple-800 font-bold" onClick={() => setView('shop')}>TIENDA 🛒</button>
+                            <button className="bg-red-500 text-white p-4 rounded-2xl border-b-4 border-red-800 font-bold" onClick={() => setView('menu')}>SALIR</button>
+                        </div>
+                    </div>
+
+                    {/* TIENDA (POPUP) */}
+                    {view === 'shop' && (
+                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center p-6 pointer-events-auto z-50">
+                            <div className="bg-white w-full max-w-sm rounded-[40px] p-8 relative">
+                                <h2 className="text-3xl text-center mb-6">TIENDA BLOX</h2>
+                                <div className="grid grid-cols-2 gap-4 mb-6">
+                                    <button onClick={() => buySkin('#3498db', 20)} className="bg-blue-400 p-4 rounded-2xl text-white font-bold border-b-4 border-blue-600">Skin Azul (20)</button>
+                                    <button onClick={() => buySkin('#e67e22', 20)} className="bg-orange-400 p-4 rounded-2xl text-white font-bold border-b-4 border-orange-600">Skin Naranja (20)</button>
+                                    <button onClick={() => buySkin('#9b59b6', 40)} className="bg-purple-400 p-4 rounded-2xl text-white font-bold border-b-4 border-purple-600">Skin Pro (40)</button>
+                                    <button onClick={buyHouse} className={`${hasHouse ? 'bg-gray-400' : 'bg-red-500'} p-4 rounded-2xl text-white font-bold border-b-4 border-red-800`}>
+                                        {hasHouse ? 'CASA COMPRADA' : 'CASA (100)'}
+                                    </button>
+                                </div>
+                                <button className="w-full bg-green-500 text-white py-4 rounded-2xl font-bold" onClick={() => setView('game')}>VOLVER A JUGAR</button>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* CONTROLES */}
+                    <div className="absolute bottom-10 left-10 pointer-events-auto">
+                        <div id="joy" className="joy-area" 
                              onMouseDown={() => joystick.current.active = true}
                              onTouchStart={() => joystick.current.active = true}
                              onTouchMove={(e) => {
                                  const area = document.getElementById('joy').getBoundingClientRect();
-                                 const t = e.touches ? e.touches[0] : e;
-                                 joystick.current.x = (t.clientX - (area.left + 60)) / 60;
-                                 joystick.current.y = (t.clientY - (area.top + 60)) / 60;
+                                 const touch = e.touches[0];
+                                 joystick.current.x = (touch.clientX - (area.left + 70)) / 70;
+                                 joystick.current.y = (touch.clientY - (area.top + 70)) / 70;
                              }}
-                             onTouchEnd={() => { joystick.current.active = false; joystick.current.x = 0; joystick.current.y = 0; }}>
-                            <div className="stick" style={{ transform: `translate(${joystick.current.x * 30}px, ${joystick.current.y * 30}px)` }}></div>
+                             onTouchEnd={() => joystick.current.active = false}>
+                            <div className="stick" style={{ transform: `translate(${joystick.current.x * 40}px, ${joystick.current.y * 40}px)` }}></div>
                         </div>
-                    )}
+                    </div>
                 </div>
             );
         };
