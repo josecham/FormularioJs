@@ -3,20 +3,65 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Blox 3D Universe</title>
+    <title>Blox Universe 3D</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@700&display=swap');
-        body { font-family: 'Fredoka', sans-serif; margin: 0; overflow: hidden; background: #00A2FF; }
-        #game-container { width: 100vw; height: 100vh; }
-        .ui-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
-        .pointer-events-auto { pointer-events: auto; }
-        .joystick-base { width: 120px; height: 120px; background: rgba(255,255,255,0.2); border-radius: 50%; border: 4px solid rgba(255,255,255,0.3); }
-        .joystick-stick { width: 50px; height: 50px; background: white; border-radius: 50%; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        body { font-family: 'Fredoka', sans-serif; background: #00A2FF; margin: 0; overflow: hidden; touch-action: none; }
+        
+        /* Efecto de Universo / Perspectiva */
+        .world {
+            perspective: 1000px;
+            width: 100vw; height: 100vh;
+            display: flex; align-items: center; justify-content: center;
+        }
+
+        .floor {
+            width: 2000px; height: 2000px;
+            background-color: #7cfc00;
+            background-image: radial-gradient(#6edb00 2px, transparent 2px);
+            background-size: 40px 40px;
+            transform: rotateX(60deg) translateY(-200px);
+            position: absolute;
+            transition: transform 0.1s linear;
+        }
+
+        /* Personaje 3D (Cubo) */
+        .cube-player {
+            position: absolute;
+            width: 50px; height: 80px;
+            transform-style: preserve-3d;
+            transition: all 0.1s linear;
+        }
+        .side {
+            position: absolute; width: 100%; height: 100%;
+            border: 2px solid rgba(0,0,0,0.1);
+        }
+        .front  { background: #FFD966; transform: translateZ(25px); }
+        .back   { background: #E69138; transform: rotateY(180deg) translateZ(25px); }
+        .right  { background: #F1C232; width: 50px; transform: rotateY(90deg) translateZ(25px); }
+        .left   { background: #F1C232; width: 50px; transform: rotateY(-90deg) translateZ(25px); }
+        .top    { background: #FFD966; height: 50px; transform: rotateX(90deg) translateZ(25px); }
+
+        /* Moneda 3D */
+        .item-3d {
+            position: absolute;
+            width: 30px; height: 30px;
+            background: #FFD700;
+            border-radius: 50%;
+            border: 4px solid #B8860B;
+            transform: rotateX(60deg);
+            animation: float 1s infinite alternate;
+        }
+
+        @keyframes float { from { margin-top: 0; } to { margin-top: -20px; } }
+
+        .ui { position: absolute; top: 0; left: 0; width: 100%; pointer-events: none; }
+        .joy-area { position: absolute; bottom: 50px; left: 50px; width: 150px; height: 150px; background: rgba(255,255,255,0.2); border-radius: 50%; pointer-events: auto; }
+        .stick { width: 60px; height: 60px; background: white; border-radius: 50%; position: absolute; top: 45px; left: 45px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
     </style>
 </head>
 <body>
@@ -28,141 +73,89 @@
         const App = () => {
             const [view, setView] = useState('menu');
             const [coins, setCoins] = useState(0);
-            const mountRef = useRef(null);
-            const moveRef = useRef({ x: 0, y: 0 });
+            const [pos, setPos] = useState({ x: 0, y: 0 });
+            const [coinPos, setCoinPos] = useState({ x: 100, y: -200 });
+            
+            const joystick = useRef({ x: 0, y: 0, active: false });
+            const requestRef = useRef();
 
-            useEffect(() => {
-                if (view !== 'game') return;
+            const update = () => {
+                if (joystick.current.active) {
+                    setPos(prev => {
+                        const newX = prev.x - joystick.current.x * 10;
+                        const newY = prev.y - joystick.current.y * 10;
 
-                // --- CONFIGURACIÓN THREE.JS (EL UNIVERSO) ---
-                const scene = new THREE.Scene();
-                scene.background = new THREE.Color(0x87CEEB); // Cielo azul
-                scene.fog = new THREE.Fog(0x87CEEB, 20, 100);
-
-                const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-                const renderer = new THREE.WebGLRenderer({ antialias: true });
-                renderer.setSize(window.innerWidth, window.innerHeight);
-                mountRef.current.appendChild(renderer.domElement);
-
-                // Luz
-                const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
-                scene.add(ambientLight);
-                const sunLight = new THREE.DirectionalLight(0xffffff, 0.5);
-                sunLight.position.set(10, 20, 10);
-                scene.add(sunLight);
-
-                // Suelo (Mundo de Bloques)
-                const floorGeo = new THREE.PlaneGeometry(200, 200);
-                const floorMat = new THREE.MeshPhongMaterial({ color: 0x7cfc00 });
-                const floor = new THREE.Mesh(floorGeo, floorMat);
-                floor.rotation.x = -Math.PI / 2;
-                scene.add(floor);
-
-                // El Personaje (Estilo Roblox Noob)
-                const playerGroup = new THREE.Group();
-                const body = new THREE.Mesh(new THREE.BoxGeometry(1, 1.2, 0.5), new THREE.MeshPhongMaterial({ color: 0x3d85c6 }));
-                const head = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.6, 0.6), new THREE.MeshPhongMaterial({ color: 0xffd966 }));
-                head.position.y = 0.9;
-                playerGroup.add(body, head);
-                playerGroup.position.y = 0.6;
-                scene.add(playerGroup);
-
-                // Monedas en el Universo
-                const coinsGroup = new THREE.Group();
-                for(let i=0; i<20; i++) {
-                    const coin = new THREE.Mesh(new THREE.CylinderGeometry(0.3, 0.3, 0.1, 32), new THREE.MeshPhongMaterial({ color: 0xffd700 }));
-                    coin.position.set(Math.random()*40-20, 0.5, Math.random()*40-20);
-                    coin.rotation.x = Math.PI / 2;
-                    coinsGroup.add(coin);
-                }
-                scene.add(coinsGroup);
-
-                camera.position.set(0, 5, 8);
-                camera.lookAt(playerGroup.position);
-
-                // LOOP DE ANIMACIÓN
-                const animate = () => {
-                    requestAnimationFrame(animate);
-
-                    // Movimiento del Personaje
-                    if (moveRef.current.x !== 0 || moveRef.current.y !== 0) {
-                        playerGroup.position.x += moveRef.current.x * 0.2;
-                        playerGroup.position.z += moveRef.current.y * 0.2;
-                        playerGroup.rotation.y = Math.atan2(moveRef.current.x, moveRef.current.y);
-                        
-                        // Cámara sigue al jugador
-                        camera.position.x = playerGroup.position.x;
-                        camera.position.z = playerGroup.position.z + 8;
-                        camera.lookAt(playerGroup.position);
-                    }
-
-                    // Rotar monedas y colisión simple
-                    coinsGroup.children.forEach(c => {
-                        c.rotation.z += 0.05;
-                        if (playerGroup.position.distanceTo(c.position) < 1) {
-                            c.position.y = -10; // "Desaparece"
-                            setCoins(v => v + 1);
+                        // Detección de colisión con la moneda
+                        const dx = newX + coinPos.x;
+                        const dy = newY + coinPos.y;
+                        if (Math.sqrt(dx*dx + dy*dy) < 50) {
+                            setCoins(c => c + 1);
+                            setCoinPos({ x: Math.random() * 600 - 300, y: Math.random() * 600 - 300 });
                         }
+
+                        return { x: newX, y: newY };
                     });
-
-                    renderer.render(scene, camera);
-                };
-                animate();
-
-                return () => {
-                    mountRef.current?.removeChild(renderer.domElement);
-                };
-            }, [view]);
-
-            // Controles Joystick
-            const handleJoystick = (e) => {
-                const touch = e.touches ? e.touches[0] : e;
-                const rect = e.currentTarget.getBoundingClientRect();
-                const centerX = rect.left + rect.width / 2;
-                const centerY = rect.top + rect.height / 2;
-                moveRef.current = {
-                    x: (touch.clientX - centerX) / 50,
-                    y: (touch.clientY - centerY) / 50
-                };
+                }
+                requestRef.current = requestAnimationFrame(update);
             };
 
-            const stopMove = () => moveRef.current = { x: 0, y: 0 };
+            useEffect(() => {
+                requestRef.current = requestAnimationFrame(update);
+                return () => cancelAnimationFrame(requestRef.current);
+            }, [coinPos]);
+
+            const handleStart = () => joystick.current.active = true;
+            const handleEnd = () => { joystick.current.active = false; joystick.current.x = 0; joystick.current.y = 0; };
+            const handleMove = (e) => {
+                if (!joystick.current.active) return;
+                const touch = e.touches ? e.touches[0] : e;
+                const area = document.getElementById('joy').getBoundingClientRect();
+                const centerX = area.left + 75;
+                const centerY = area.top + 75;
+                joystick.current.x = (touch.clientX - centerX) / 75;
+                joystick.current.y = (touch.clientY - centerY) / 75;
+            };
 
             if (view === 'menu') {
                 return (
-                    <div className="h-screen flex flex-col items-center justify-center p-6 bg-sky-500">
-                        <h1 className="text-white text-6xl mb-8 italic drop-shadow-2xl text-center">BLOX UNIVERSE</h1>
-                        <button 
-                            className="bg-green-500 border-b-8 border-green-700 text-white text-4xl px-12 py-6 rounded-3xl active:translate-y-2 active:border-b-2 transition-all pointer-events-auto"
-                            onClick={() => setView('game')}
-                        >
-                            ¡ENTRAR!
-                        </button>
+                    <div className="h-screen flex flex-col items-center justify-center bg-sky-500">
+                        <h1 className="text-white text-6xl mb-10 drop-shadow-2xl italic uppercase">Blox Adventure</h1>
+                        <button className="bg-green-500 text-white text-4xl px-16 py-8 rounded-3xl border-b-8 border-green-700 active:translate-y-2 active:border-b-2 transition-all"
+                                onClick={() => setView('game')}>¡ENTRAR!</button>
                     </div>
                 );
             }
 
             return (
-                <div id="game-container" ref={mountRef}>
-                    <div className="ui-overlay flex flex-col justify-between p-6">
-                        <div className="flex justify-between items-start pointer-events-auto">
-                            <div className="bg-yellow-400 border-4 border-white p-3 rounded-full shadow-lg">
-                                <span className="text-white text-2xl font-bold">💰 {coins}</span>
-                            </div>
-                            <button onClick={() => setView('menu')} className="bg-red-500 text-white p-3 rounded-xl border-b-4 border-red-700 font-bold">SALIR</button>
-                        </div>
+                <div className="world" onTouchMove={handleMove} onMouseMove={handleMove} onMouseUp={handleEnd} onTouchEnd={handleEnd}>
+                    {/* El Suelo que se mueve */}
+                    <div className="floor" style={{ transform: `rotateX(60deg) translate3d(${pos.x}px, ${pos.y}px, 0)` }}>
+                        {/* Moneda en el suelo */}
+                        <div className="item-3d" style={{ left: 1000 + coinPos.x, top: 1000 + coinPos.y }}></div>
+                    </div>
 
-                        {/* Joystick Virtual */}
-                        <div 
-                            className="joystick-base flex items-center justify-center mb-10 ml-4 pointer-events-auto"
-                            onTouchMove={handleJoystick}
-                            onTouchEnd={stopMove}
-                            onMouseMove={(e) => e.buttons === 1 && handleJoystick(e)}
-                            onMouseUp={stopMove}
-                        >
-                            <div className="joystick-stick" style={{ transform: `translate(${moveRef.current.x * 20}px, ${moveRef.current.y * 20}px)` }}></div>
+                    {/* El Jugador (Cubo central) */}
+                    <div className="cube-player" style={{ transform: `rotateY(${joystick.current.x * 45}deg)` }}>
+                        <div className="side front flex flex-col items-center justify-center">
+                            <div className="flex gap-4 mb-2"><div className="w-2 h-2 bg-black rounded-full"></div><div className="w-2 h-2 bg-black rounded-full"></div></div>
+                            <div className="w-6 h-2 bg-black rounded-full"></div>
+                        </div>
+                        <div className="side back"></div>
+                        <div className="side right"></div>
+                        <div className="side left"></div>
+                        <div className="side top"></div>
+                    </div>
+
+                    {/* UI Overlay */}
+                    <div className="ui h-full flex flex-col justify-between p-6">
+                        <div className="bg-yellow-400 border-4 border-white self-center px-10 py-2 rounded-full shadow-2xl pointer-events-auto">
+                            <span className="text-white text-4xl font-bold tracking-tighter">⭐ {coins}</span>
+                        </div>
+                        <div id="joy" className="joy-area" onMouseDown={handleStart} onTouchStart={handleStart}>
+                            <div className="stick" style={{ transform: `translate(${joystick.current.x * 40}px, ${joystick.current.y * 40}px)` }}></div>
                         </div>
                     </div>
+                    <button className="absolute top-5 left-5 bg-red-500 text-white p-3 rounded-xl border-b-4 border-red-800 pointer-events-auto" onClick={() => setView('menu')}>SALIR</button>
                 </div>
             );
         };
