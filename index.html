@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Neon VR City Experience</title>
+    <title>Neon VR City Pro</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -13,32 +13,47 @@
         .vr-container { display: flex; width: 100vw; height: 100vh; }
         .eye { 
             flex: 1; height: 100%; overflow: hidden; position: relative; 
-            perspective: 1000px; border-right: 1px solid rgba(255,255,255,0.1);
+            perspective: 1200px;
         }
         
-        /* La escena 3D que usa la imagen de fondo */
         .scene {
             position: absolute; width: 100%; height: 100%;
             transform-style: preserve-3d;
-            background-image: url('https://files.oaiusercontent.com/file-6fTz8Sj3Zf7Gj9Kj8L4d6G?se=2024-05-23T12%3A00%3A00Z&sp=r&sv=2024-08-04&sr=b&rscc=max-age%3D604800%2C%20immutable%2C%20private&rscd=attachment%3B%20filename%3DNeonCityVR.jpg');
-            background-size: cover;
-            background-position: center;
+            background: radial-gradient(circle at center, #1b2735 0%, #090a0f 100%);
         }
 
-        /* Capa de suelo brillante neón */
-        .neon-floor {
-            position: absolute; width: 4000px; height: 4000px;
-            background: 
-                linear-gradient(rgba(0, 210, 255, 0.1) 2px, transparent 2px),
-                linear-gradient(90deg, rgba(255, 0, 255, 0.1) 2px, transparent 2px);
+        /* Edificios Neón Estilo Imagen */
+        .building {
+            position: absolute;
+            background: #050505;
+            border-left: 2px solid #00f3ff;
+            border-right: 2px solid #ff00ff;
+            box-shadow: 0 0 25px rgba(0, 243, 255, 0.3);
+            transform-style: preserve-3d;
+        }
+
+        .neon-window {
+            position: absolute; width: 100%; height: 4px;
+            background: rgba(0, 243, 255, 0.5);
+            box-shadow: 0 0 10px #00f3ff;
+        }
+
+        /* Suelo de la imagen con rejilla infinita */
+        .neon-grid {
+            position: absolute; width: 8000px; height: 8000px;
+            background-image: 
+                linear-gradient(to right, #00f3ff 1px, transparent 1px),
+                linear-gradient(to bottom, #ff00ff 1px, transparent 1px);
             background-size: 80px 80px;
-            transform: rotateX(90deg) translate3d(-2000px, 0, -300px);
-            box-shadow: 0 0 50px rgba(0, 210, 255, 0.2) inset;
+            transform: rotateX(90deg) translate3d(-4000px, 0, -400px);
+            opacity: 0.4;
         }
 
-        .overlay {
-            background: rgba(0,0,0,0.8);
-            backdrop-filter: blur(10px);
+        /* Niebla en el horizonte */
+        .fog {
+            position: absolute; width: 100%; height: 100%;
+            background: linear-gradient(to top, transparent 40%, #000 90%);
+            pointer-events: none;
         }
     </style>
 </head>
@@ -50,77 +65,93 @@
 
         const App = () => {
             const [active, setActive] = useState(false);
-            const [rotation, setRotation] = useState({ alpha: 0, beta: 0, gamma: 0 });
-            const [walk, setWalk] = useState(0);
+            const [rotation, setRotation] = useState({ alpha: 0, beta: 90, gamma: 0 });
+            const [zPos, setZPos] = useState(0);
 
-            const handleMotion = (e) => {
-                setRotation({
-                    alpha: e.alpha || 0,
-                    beta: e.beta || 0,
-                    gamma: e.gamma || 0
-                });
-            };
+            // Generar ciudad una vez
+            const buildings = useRef([...Array(50)].map((_, i) => ({
+                id: i,
+                x: Math.random() * 2000 - 1000,
+                z: Math.random() * -5000,
+                w: 100 + Math.random() * 150,
+                h: 400 + Math.random() * 800,
+                neon: i % 2 === 0 ? '#00f3ff' : '#ff00ff'
+            })));
 
             const startVR = () => {
                 if (typeof DeviceOrientationEvent.requestPermission === 'function') {
-                    DeviceOrientationEvent.requestPermission().then(state => {
-                        if (state === 'granted') {
-                            window.addEventListener('deviceorientation', handleMotion);
+                    DeviceOrientationEvent.requestPermission().then(s => {
+                        if (s === 'granted') {
+                            window.addEventListener('deviceorientation', e => {
+                                setRotation({ alpha: e.alpha, beta: e.beta, gamma: e.gamma });
+                            });
                             setActive(true);
                         }
                     });
                 } else {
-                    window.addEventListener('deviceorientation', handleMotion);
+                    window.addEventListener('deviceorientation', e => {
+                        setRotation({ alpha: e.alpha, beta: e.beta, gamma: e.gamma });
+                    });
                     setActive(true);
                 }
             };
 
-            // Efecto de caminar (desplazamiento del suelo)
+            // Animación de caminar
             useEffect(() => {
                 if (!active) return;
                 const loop = setInterval(() => {
-                    // Si inclinas la cabeza hacia adelante, "caminas"
-                    if (rotation.beta > 75) {
-                        setWalk(w => (w + 8) % 80);
+                    // Si inclinas la cabeza hacia adelante, avanzas
+                    if (rotation.beta > 70) {
+                        setZPos(z => z + 12);
                     }
                 }, 16);
                 return () => clearInterval(loop);
             }, [active, rotation.beta]);
 
             if (!active) return (
-                <div className="h-screen flex items-center justify-center bg-black">
-                    <div className="overlay p-10 rounded-[40px] border border-cyan-500/30 text-center max-w-sm">
-                        <h1 className="text-white text-4xl font-bold mb-4 tracking-tighter">NEON VR CITY</h1>
-                        <p className="text-cyan-400/70 mb-8">Coloca el celular en tu VR Box y camina mirando al suelo.</p>
-                        <button 
-                            className="bg-cyan-500 hover:bg-cyan-400 text-black font-black px-8 py-4 rounded-2xl transition-all shadow-[0_0_30px_rgba(34,211,238,0.4)]"
-                            onClick={startVR}>
-                            START VR EXPERIENCE
-                        </button>
-                    </div>
+                <div className="h-screen flex flex-col items-center justify-center bg-black text-center p-6">
+                    <h1 className="text-cyan-400 text-5xl font-black mb-4 italic">NEON VR WALKER</h1>
+                    <p className="text-white/60 mb-8 max-w-xs text-lg">Inicia y camina inclinando la cabeza hacia abajo.</p>
+                    <button 
+                        className="bg-cyan-500 text-black font-bold px-12 py-6 rounded-full text-2xl shadow-[0_0_30px_#00f3ff]"
+                        onClick={startVR}>
+                        START VR BOX
+                    </button>
                 </div>
             );
 
-            const renderEye = (eyeOffset) => (
+            const renderEye = (offset) => (
                 <div className="eye">
                     <div className="scene" style={{
                         transform: `
                             rotateX(${(rotation.beta - 90)}deg) 
-                            rotateY(${(-rotation.alpha + eyeOffset)}deg)
+                            rotateY(${(-rotation.alpha + offset)}deg)
                             rotateZ(${-rotation.gamma}deg)
                         `
                     }}>
-                        <div className="neon-floor" style={{
-                            backgroundPosition: `0px ${walk}px`
-                        }} />
+                        <div className="neon-grid" style={{ transform: `rotateX(90deg) translate3d(-4000px, ${zPos}px, -400px)` }} />
+                        
+                        {buildings.current.map(b => (
+                            <div key={b.id} className="building" style={{
+                                width: b.w, height: b.h,
+                                transform: `translate3d(${b.x}px, ${400 - b.h}px, ${b.z + (zPos % 5000)}px)`,
+                                borderColor: b.neon,
+                                boxShadow: `0 0 20px ${b.neon}55`
+                            }}>
+                                <div className="neon-window" style={{ top: '20%', background: b.neon }} />
+                                <div className="neon-window" style={{ top: '40%', background: b.neon }} />
+                                <div className="neon-window" style={{ top: '60%', background: b.neon }} />
+                            </div>
+                        ))}
+                        <div className="fog" />
                     </div>
                 </div>
             );
 
             return (
                 <div className="vr-container">
-                    {renderEye(-1.5)}
-                    {renderEye(1.5)}
+                    {renderEye(-1)}
+                    {renderEye(1)}
                 </div>
             );
         };
