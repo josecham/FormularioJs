@@ -3,39 +3,42 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Futuristic VR Walk</title>
+    <title>Neon VR City Experience</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; touch-action: none; font-family: sans-serif; }
-        
+        body { margin: 0; overflow: hidden; background: #000; touch-action: none; }
         .vr-container { display: flex; width: 100vw; height: 100vh; }
-        .eye { flex: 1; height: 100%; overflow: hidden; position: relative; perspective: 800px; }
-
+        .eye { 
+            flex: 1; height: 100%; overflow: hidden; position: relative; 
+            perspective: 1000px; border-right: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        /* La escena 3D que usa la imagen de fondo */
         .scene {
             position: absolute; width: 100%; height: 100%;
             transform-style: preserve-3d;
-            transition: transform 0.05s linear; /* Suaviza el movimiento */
+            background-image: url('https://files.oaiusercontent.com/file-6fTz8Sj3Zf7Gj9Kj8L4d6G?se=2024-05-23T12%3A00%3A00Z&sp=r&sv=2024-08-04&sr=b&rscc=max-age%3D604800%2C%20immutable%2C%20private&rscd=attachment%3B%20filename%3DNeonCityVR.jpg');
+            background-size: cover;
+            background-position: center;
         }
 
-        .building {
-            position: absolute;
-            background: linear-gradient(to top, #0f0c29, #302b63, #24243e);
-            border: 1px solid #6a0572;
-            box-shadow: 0 0 15px #bb00ff55;
-            transform-style: preserve-3d;
+        /* Capa de suelo brillante neón */
+        .neon-floor {
+            position: absolute; width: 4000px; height: 4000px;
+            background: 
+                linear-gradient(rgba(0, 210, 255, 0.1) 2px, transparent 2px),
+                linear-gradient(90deg, rgba(255, 0, 255, 0.1) 2px, transparent 2px);
+            background-size: 80px 80px;
+            transform: rotateX(90deg) translate3d(-2000px, 0, -300px);
+            box-shadow: 0 0 50px rgba(0, 210, 255, 0.2) inset;
         }
-        .neon-stripe { position: absolute; background: #8d021f; box-shadow: 0 0 8px #d60032; }
-        
-        /* Suelo de la ciudad */
-        .city-ground {
-            position: absolute; width: 5000px; height: 5000px;
-            background: repeating-linear-gradient(rgba(106,5,114,0.3) 0 2px, transparent 2px 50px),
-                        repeating-linear-gradient(90deg, rgba(106,5,114,0.3) 0 2px, transparent 2px 50px);
-            background-size: 50px 50px;
-            transform: rotateX(90deg) translate3d(-2500px, 0, -50px); /* Ajustado para que veas el suelo bajo tus pies */
-            filter: brightness(0.7);
+
+        .overlay {
+            background: rgba(0,0,0,0.8);
+            backdrop-filter: blur(10px);
         }
     </style>
 </head>
@@ -48,17 +51,7 @@
         const App = () => {
             const [active, setActive] = useState(false);
             const [rotation, setRotation] = useState({ alpha: 0, beta: 0, gamma: 0 });
-            const [positionZ, setPositionZ] = useState(0); // Tu posición en el eje Z (adelante/atrás)
-            const [positionX, setPositionX] = useState(0); // Tu posición en el eje X (izquierda/derecha)
-            
-            const buildings = useRef([...Array(60)].map((_, i) => ({
-                id: i,
-                x: Math.random() * 3000 - 1500, // Más dispersos
-                z: Math.random() * -6000 + 1000, // Más profundidad
-                w: 80 + Math.random() * 150,
-                h: 300 + Math.random() * 700,
-                color: i % 3 === 0 ? '#ff00ff' : '#00ffff' // Más colores neón
-            })));
+            const [walk, setWalk] = useState(0);
 
             const handleMotion = (e) => {
                 setRotation({
@@ -75,81 +68,59 @@
                             window.addEventListener('deviceorientation', handleMotion);
                             setActive(true);
                         }
-                    }).catch(error => alert("Error al conceder permisos: " + error));
+                    });
                 } else {
                     window.addEventListener('deviceorientation', handleMotion);
                     setActive(true);
                 }
             };
 
-            // Bucle de movimiento simulado por inclinación de cabeza
+            // Efecto de caminar (desplazamiento del suelo)
             useEffect(() => {
                 if (!active) return;
-                const interval = setInterval(() => {
-                    // Si miras hacia abajo (beta > 80), avanza
-                    // Si miras hacia arriba (beta < 40), retrocede
-                    const forwardSpeed = Math.max(0, (rotation.beta - 70) / 10); // Más sensible
-                    const backwardSpeed = Math.max(0, (30 - rotation.beta) / 10);
-                    
-                    setPositionZ(prevZ => prevZ + (forwardSpeed - backwardSpeed) * 10); // Velocidad de "caminar"
-                    
-                    // Si inclinas la cabeza hacia los lados (gamma)
-                    const sideSpeed = rotation.gamma / 50; // Ajusta la velocidad lateral
-                    setPositionX(prevX => prevX + sideSpeed * 10);
-
-                }, 50); // Más frecuente para mayor fluidez
-                return () => clearInterval(interval);
-            }, [active, rotation]); // Depende de la rotación para reaccionar al instante
+                const loop = setInterval(() => {
+                    // Si inclinas la cabeza hacia adelante, "caminas"
+                    if (rotation.beta > 75) {
+                        setWalk(w => (w + 8) % 80);
+                    }
+                }, 16);
+                return () => clearInterval(loop);
+            }, [active, rotation.beta]);
 
             if (!active) return (
-                <div className="h-screen flex flex-col items-center justify-center bg-gray-900 text-white p-10 text-center">
-                    <h1 className="text-4xl font-bold mb-6 italic text-fuchsia-400">CIUDAD NEÓN A PIE</h1>
-                    <div className="mb-10 text-gray-400">
-                        Inicia VR, coloca el celular en el VR Box. <br/>
-                        Mira hacia abajo para caminar, mira al frente para detenerte, mira arriba para retroceder.
+                <div className="h-screen flex items-center justify-center bg-black">
+                    <div className="overlay p-10 rounded-[40px] border border-cyan-500/30 text-center max-w-sm">
+                        <h1 className="text-white text-4xl font-bold mb-4 tracking-tighter">NEON VR CITY</h1>
+                        <p className="text-cyan-400/70 mb-8">Coloca el celular en tu VR Box y camina mirando al suelo.</p>
+                        <button 
+                            className="bg-cyan-500 hover:bg-cyan-400 text-black font-black px-8 py-4 rounded-2xl transition-all shadow-[0_0_30px_rgba(34,211,238,0.4)]"
+                            onClick={startVR}>
+                            START VR EXPERIENCE
+                        </button>
                     </div>
-                    <button 
-                        className="bg-fuchsia-600 px-10 py-5 rounded-full text-2xl font-bold shadow-[0_0_20px_#d946ef]"
-                        onClick={startVR}
-                    >
-                        INICIAR VR Y CAMINAR
-                    </button>
                 </div>
             );
 
-            const renderEye = (offset) => (
+            const renderEye = (eyeOffset) => (
                 <div className="eye">
                     <div className="scene" style={{
                         transform: `
-                            translate3d(${positionX + offset * 10}px, 0px, ${positionZ}px) /* Tu posición */
-                            rotateX(${(-rotation.beta + 90)}deg) /* Ajuste para ver el suelo naturalmente */
-                            rotateY(${-rotation.alpha}deg)
-                            rotateZ(${rotation.gamma}deg)
+                            rotateX(${(rotation.beta - 90)}deg) 
+                            rotateY(${(-rotation.alpha + eyeOffset)}deg)
+                            rotateZ(${-rotation.gamma}deg)
                         `
                     }}>
-                        {/* Edificios */}
-                        {buildings.current.map(b => (
-                            <div key={b.id} className="building" style={{
-                                width: b.w, height: b.h,
-                                transform: `translate3d(${b.x}px, ${150 - b.h}px, ${b.z}px)`, /* Ajusta Y para que estén en el suelo */
-                                borderColor: b.color
-                            }}>
-                                <div className="neon-stripe" style={{ width: '100%', height: '4px', top: '20%', background: b.color }} />
-                                <div className="neon-stripe" style={{ width: '100%', height: '4px', top: '50%', background: b.color }} />
-                                <div className="neon-stripe" style={{ width: '100%', height: '4px', top: '80%', background: b.color }} />
-                            </div>
-                        ))}
-
-                        {/* Suelo de la Ciudad */}
-                        <div className="city-ground" />
+                        <div className="neon-floor" style={{
+                            backgroundPosition: `0px ${walk}px`
+                        }} />
                     </div>
                 </div>
             );
 
             return (
                 <div className="vr-container">
-                    {renderEye(-10)} {/* Ojo izquierdo, ajustado ligeramente */}
-                    {renderEye(10)}  {/* Ojo derecho, ajustado ligeramente */}
+                    {renderEye(-1.5)}
+                    {renderEye(1.5)}
                 </div>
             );
         };
