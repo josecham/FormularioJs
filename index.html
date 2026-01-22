@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Blox City Builder</title>
+    <title>Blox City Universe 2.0</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://unpkg.com/react@18/umd/react.development.js"></script>
     <script src="https://unpkg.com/react-dom@18/umd/react-dom.development.js"></script>
@@ -11,30 +11,18 @@
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Fredoka:wght@700&display=swap');
         body { font-family: 'Fredoka', sans-serif; background: #00A2FF; margin: 0; overflow: hidden; touch-action: none; }
-        
-        .world { perspective: 1000px; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; }
+        .world { perspective: 1200px; width: 100vw; height: 100vh; display: flex; align-items: center; justify-content: center; transition: all 0.5s; }
         .floor { 
-            width: 5000px; height: 5000px; background-color: #7cfc00;
-            background-image: radial-gradient(rgba(0,0,0,0.1) 1px, transparent 1px);
-            background-size: 50px 50px;
+            width: 6000px; height: 6000px; background-color: #7cfc00;
+            background-image: repeating-linear-gradient(0deg, transparent, transparent 49px, rgba(0,0,0,0.05) 50px),
+                              repeating-linear-gradient(90deg, transparent, transparent 49px, rgba(0,0,0,0.05) 50px);
             transform: rotateX(60deg); position: absolute;
         }
-
-        /* Estilos de edificios */
-        .build-obj { position: absolute; transform-style: preserve-3d; display: flex; align-items: center; justify-content: center; color: white; font-size: 12px; text-align: center; }
-        .escuela { width: 150px; height: 100px; background: #f39c12; border: 4px solid #d35400; }
-        .fabrica { width: 120px; height: 120px; background: #7f8c8d; border: 4px solid #2c3e50; }
-        .arbol { width: 40px; height: 40px; background: #27ae60; border-radius: 50%; border: 4px solid #1e8449; }
-        .calle { width: 400px; height: 80px; background: #333; border-left: 5px dashed white; border-right: 5px dashed white; }
-        .auto { width: 60px; height: 40px; background: #e74c3c; border-radius: 10px; border: 3px solid #c0392b; }
-
-        /* Personaje */
-        .player-box { position: absolute; width: 40px; height: 60px; transform-style: preserve-3d; z-index: 100; transition: bottom 0.2s; }
-        .side { position: absolute; width: 100%; height: 100%; background: #FFD966; border: 2px solid rgba(0,0,0,0.1); }
-        .front { transform: translateZ(20px); }
-
-        /* UI */
-        .shop-modal { background: rgba(255,255,255,0.95); border-radius: 30px; border-top: 8px solid #3498db; }
+        .build-node { position: absolute; transform-style: preserve-3d; display: flex; align-items: center; justify-content: center; }
+        .player { position: absolute; width: 45px; height: 70px; transform-style: preserve-3d; z-index: 1000; bottom: 45%; transition: transform 0.1s; }
+        .cube { position: absolute; width: 100%; height: 100%; background: #FFD966; border: 3px solid #b5932a; }
+        .interior { width: 90vw; height: 70vh; border: 10px solid #2c3e50; border-radius: 40px; position: relative; overflow: hidden; }
+        .joy-stick { width: 50px; height: 50px; background: white; border-radius: 50%; position: absolute; box-shadow: 0 4px 10px rgba(0,0,0,0.3); }
     </style>
 </head>
 <body>
@@ -44,123 +32,143 @@
         const { useState, useEffect, useRef } = React;
 
         const App = () => {
-            const [view, setView] = useState('world'); 
-            const [coins, setCoins] = useState(200); 
+            const [view, setView] = useState('world'); // world, interior_casa, interior_escuela, interior_fabrica
+            const [coins, setCoins] = useState(300);
             const [pos, setPos] = useState({ x: 0, y: 0 });
-            const [city, setCity] = useState([]); // Objetos construidos
+            const [city, setCity] = useState([]);
             const [showShop, setShowShop] = useState(false);
+            const [isDriving, setIsDriving] = useState(false);
+            const [nearObject, setNearObject] = useState(null);
+
             const joyData = useRef({ x: 0, y: 0, active: false });
-            const coinPos = useRef({ x: 100, y: -100 });
+            const coinPos = useRef({ x: 150, y: -150 });
 
-            // Generador de dinero de fábricas
+            // Ciclo de movimiento
             useEffect(() => {
-                const timer = setInterval(() => {
-                    const fabricas = city.filter(b => b.type === 'fabrica').length;
-                    if (fabricas > 0) setCoins(c => c + (fabricas * 5));
-                }, 3000);
-                return () => clearInterval(timer);
-            }, [city]);
-
-            // Bucle de movimiento
-            useEffect(() => {
-                const gameLoop = () => {
+                const loop = () => {
                     if (joyData.current.active && view === 'world') {
                         setPos(prev => {
-                            const nX = prev.x - joyData.current.x * 12;
-                            const nY = prev.y - joyData.current.y * 12;
-                            // Colisión estrella
-                            if (Math.sqrt(Math.pow(nX + coinPos.current.x, 2) + Math.pow(nY + coinPos.current.y, 2)) < 60) {
-                                setCoins(c => c + 25);
-                                coinPos.current = { x: Math.random() * 1000 - 500, y: Math.random() * 1000 - 500 };
+                            const speed = isDriving ? 25 : 12;
+                            const nX = prev.x - joyData.current.x * speed;
+                            const nY = prev.y - joyData.current.y * speed;
+
+                            // Revisar cercanía a edificios para entrar
+                            let found = null;
+                            city.forEach(b => {
+                                const dist = Math.sqrt(Math.pow(nX + (b.rx), 2) + Math.pow(nY - (b.ry), 2));
+                                if (dist < 150) found = b;
+                            });
+                            setNearObject(found);
+
+                            // Recoger monedas
+                            if (Math.sqrt(Math.pow(nX + coinPos.current.x, 2) + Math.pow(nY + coinPos.current.y, 2)) < 70) {
+                                setCoins(c => c + 50);
+                                coinPos.current = { x: Math.random() * 1200 - 600, y: Math.random() * 1200 - 600 };
                             }
+
                             return { x: nX, y: nY };
                         });
                     }
-                    requestAnimationFrame(gameLoop);
+                    requestAnimationFrame(loop);
                 };
-                requestAnimationFrame(gameLoop);
-            }, [view]);
+                requestAnimationFrame(loop);
+            }, [view, city, isDriving]);
 
-            const buyBuilding = (type, price, name) => {
+            const buy = (type, price, icon) => {
                 if (coins >= price) {
-                    setCoins(c => c - price);
-                    const newBuild = {
-                        id: Date.now(),
-                        type,
-                        name,
-                        x: 2500 - pos.x + (Math.random() * 100 - 50),
-                        y: 2500 - pos.y + (Math.random() * 100 - 50)
-                    };
-                    setCity([...city, newBuild]);
+                    setCoins(coins - price);
+                    const newB = { id: Date.now(), type, icon, rx: -pos.x, ry: pos.y };
+                    setCity([...city, newB]);
                     setShowShop(false);
                 }
             };
 
+            const renderInterior = () => {
+                const colors = { escuela: 'bg-orange-50', fabrica: 'bg-gray-300', casa: 'bg-yellow-50' };
+                return (
+                    <div className="h-screen flex flex-col items-center justify-center bg-black/80">
+                        <div className={`interior ${colors[nearObject.type]} p-10 flex flex-col items-center`}>
+                            <h1 className="text-4xl mb-10">ESTÁS EN: {nearObject.type.toUpperCase()}</h1>
+                            {nearObject.type === 'escuela' && <div className="text-center"><div className="text-8xl mb-4">👨‍🏫</div><div className="bg-green-800 p-4 w-64 h-32 text-white border-4 border-yellow-900">2 + 2 = 4</div></div>}
+                            {nearObject.type === 'fabrica' && <div className="text-center"><div className="text-8xl animate-spin">⚙️</div><button onClick={() => setCoins(coins + 10)} className="mt-10 bg-blue-500 p-4 rounded-xl text-white">RECOGER DINERO 💰</button></div>}
+                            {nearObject.type === 'casa' && <div className="text-8xl">🛌🛋️🪑</div>}
+                            <button className="absolute bottom-10 bg-red-500 text-white px-10 py-4 rounded-full font-bold" onClick={() => setView('world')}>SALIR</button>
+                        </div>
+                    </div>
+                );
+            };
+
             return (
-                <div className="h-screen w-full relative overflow-hidden bg-sky-400">
-                    
-                    <div className="world">
-                        <div className="floor" style={{ transform: `rotateX(60deg) translate3d(${pos.x}px, ${pos.y}px, 0)` }}>
-                            {/* Estrella de dinero */}
-                            <div className="absolute w-12 h-12 bg-yellow-400 rounded-full border-4 border-white flex items-center justify-center text-xl animate-bounce shadow-lg" 
-                                 style={{ left: 2500 + coinPos.current.x, top: 2500 + coinPos.current.y }}>⭐</div>
-                            
-                            {/* Edificios construidos */}
-                            {city.map(b => (
-                                <div key={b.id} className={`build-obj ${b.type}`} style={{ left: b.x, top: b.y }}>
-                                    {b.name}
+                <div className="h-screen w-full relative overflow-hidden bg-sky-300">
+                    {view === 'world' ? (
+                        <>
+                            <div className="world">
+                                <div className="floor" style={{ transform: `rotateX(60deg) translate3d(${pos.x}px, ${pos.y}px, 0)` }}>
+                                    <div className="absolute w-12 h-12 bg-yellow-400 rounded-full border-4 border-white flex items-center justify-center shadow-lg" 
+                                         style={{ left: 3000 + coinPos.current.x, top: 3000 + coinPos.current.y }}>⭐</div>
+                                    
+                                    {city.map(b => (
+                                        <div key={b.id} className="build-node" style={{ left: 3000 + b.rx, top: 3000 + b.ry }}>
+                                            <div className="text-6xl" style={{ transform: 'rotateX(-60deg)' }}>{b.icon}</div>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
 
-                        {/* Personaje */}
-                        <div className="player-box" style={{ bottom: '45%' }}>
-                            <div className="side front flex flex-col items-center justify-center">
-                                <div className="flex gap-2 mb-1"><div className="w-1 h-1 bg-black rounded-full"></div><div className="w-1 h-1 bg-black rounded-full"></div></div>
-                                <div className="w-4 h-1 bg-black rounded-full"></div>
-                            </div>
-                        </div>
-                    </div>
-
-                    {/* INTERFAZ UI */}
-                    <div className="absolute top-6 left-6 flex flex-col gap-2">
-                        <div className="bg-yellow-400 border-4 border-white px-6 py-2 rounded-full text-white text-2xl shadow-xl flex items-center gap-2">💰 {coins}</div>
-                        <button className="bg-blue-600 text-white p-4 rounded-2xl font-bold border-b-4 border-blue-800 shadow-lg" onClick={() => setShowShop(true)}>🏗️ CONSTRUIR</button>
-                    </div>
-
-                    {/* TIENDA DE CIUDAD */}
-                    {showShop && (
-                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center p-6 z-[200]">
-                            <div className="shop-modal w-full max-w-md p-6 max-h-[80vh] overflow-y-auto">
-                                <h2 className="text-2xl text-center mb-6">PLANIFICADOR URBANO</h2>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <button onClick={() => buyBuilding('arbol', 10, '🌳')} className="bg-green-100 p-4 rounded-xl border-b-4 border-green-300">Árbol $10</button>
-                                    <button onClick={() => buyBuilding('calle', 30, '🛣️')} className="bg-gray-100 p-4 rounded-xl border-b-4 border-gray-300">Calle $30</button>
-                                    <button onClick={() => buyBuilding('fabrica', 150, '🏭')} className="bg-gray-200 p-4 rounded-xl border-b-4 border-gray-400">Fábrica $150 (+$5)</button>
-                                    <button onClick={() => buyBuilding('escuela', 200, '🏫')} className="bg-orange-100 p-4 rounded-xl border-b-4 border-orange-300">Escuela $200</button>
-                                    <button onClick={() => buyBuilding('auto', 80, '🚗')} className="bg-red-100 p-4 rounded-xl border-b-4 border-red-300">Auto $80</button>
+                                <div className="player">
+                                    {isDriving ? <div className="text-5xl">🚗</div> : <div className="cube"></div>}
                                 </div>
-                                <button className="w-full mt-6 bg-red-500 text-white py-3 rounded-xl font-bold" onClick={() => setShowShop(false)}>CERRAR</button>
                             </div>
-                        </div>
-                    )}
 
-                    {/* JOYSTICK */}
-                    <div className="absolute bottom-10 left-10 w-32 h-32 bg-white/20 rounded-full border-4 border-white/30 flex items-center justify-center pointer-events-auto"
-                         onTouchStart={() => joyData.current.active = true}
-                         onTouchMove={(e) => {
-                            const rect = e.currentTarget.getBoundingClientRect();
-                            const t = e.touches[0];
-                            const centerX = rect.left + 64;
-                            const centerY = rect.top + 64;
-                            const dist = Math.min(50, Math.sqrt(Math.pow(t.clientX - centerX, 2) + Math.pow(t.clientY - centerY, 2)));
-                            const angle = Math.atan2(t.clientY - centerY, t.clientX - centerX);
-                            joyData.current.x = (Math.cos(angle) * dist) / 50;
-                            joyData.current.y = (Math.sin(angle) * dist) / 50;
-                         }}
-                         onTouchEnd={() => {joyData.current.active = false; joyData.current.x = 0; joyData.current.y = 0;}}>
-                        <div className="w-14 h-14 bg-white rounded-full shadow-lg" style={{ transform: `translate(${joyData.current.x * 35}px, ${joyData.current.y * 35}px)` }}></div>
-                    </div>
+                            {/* Botón de acción */}
+                            {nearObject && (
+                                <button className="absolute bottom-40 left-1/2 -translate-x-1/2 bg-yellow-400 border-4 border-white p-6 rounded-3xl font-bold text-xl shadow-2xl animate-bounce"
+                                        onClick={() => {
+                                            if(nearObject.type === 'auto') setIsDriving(!isDriving);
+                                            else setView('interior_' + nearObject.type);
+                                        }}>
+                                    {nearObject.type === 'auto' ? (isDriving ? 'BAJARSE 🚪' : 'CONDUCIR 🏎️') : `ENTRAR A ${nearObject.type.toUpperCase()} 🚪`}
+                                </button>
+                            )}
+
+                            {/* Controles UI */}
+                            <div className="absolute top-6 left-6 flex flex-col gap-2">
+                                <div className="bg-white border-4 border-yellow-400 px-6 py-2 rounded-full text-2xl shadow-lg">💰 {coins}</div>
+                                <button onClick={() => setShowShop(true)} className="bg-blue-500 text-white p-4 rounded-2xl font-bold border-b-4 border-blue-800">🏗️ TIENDA</button>
+                            </div>
+
+                            {/* Joystick */}
+                            <div className="absolute bottom-10 left-10 w-32 h-32 bg-black/20 rounded-full border-4 border-white/40 flex items-center justify-center"
+                                 onTouchStart={() => joyData.current.active = true}
+                                 onTouchMove={(e) => {
+                                     const rect = e.currentTarget.getBoundingClientRect();
+                                     const t = e.touches[0];
+                                     const cX = rect.left + 64, cY = rect.top + 64;
+                                     const dist = Math.min(50, Math.sqrt(Math.pow(t.clientX-cX,2)+Math.pow(t.clientY-cY,2)));
+                                     const ang = Math.atan2(t.clientY-cY, t.clientX-cX);
+                                     joyData.current.x = (Math.cos(ang)*dist)/50;
+                                     joyData.current.y = (Math.sin(ang)*dist)/50;
+                                 }}
+                                 onTouchEnd={() => {joyData.current.active = false; joyData.current.x = 0; joyData.current.y = 0;}}>
+                                <div className="joy-stick" style={{ transform: `translate(${joyData.current.x * 40}px, ${joyData.current.y * 40}px)` }}></div>
+                            </div>
+
+                            {showShop && (
+                                <div className="absolute inset-0 bg-black/70 flex items-center justify-center p-6 z-[3000]">
+                                    <div className="bg-white rounded-3xl p-6 w-full max-w-sm">
+                                        <h2 className="text-2xl mb-4 text-center">CIUDAD TIENDA</h2>
+                                        <div className="grid grid-cols-2 gap-3">
+                                            <button onClick={() => buy('casa', 100, '🏠')} className="bg-blue-100 p-4 rounded-xl">Casa $100</button>
+                                            <button onClick={() => buy('escuela', 250, '🏫')} className="bg-orange-100 p-4 rounded-xl">Escuela $250</button>
+                                            <button onClick={() => buy('fabrica', 400, '🏭')} className="bg-gray-100 p-4 rounded-xl">Fábrica $400</button>
+                                            <button onClick={() => buy('auto', 150, '🚗')} className="bg-red-100 p-4 rounded-xl">Auto $150</button>
+                                            <button onClick={() => buy('arbol', 20, '🌲')} className="bg-green-100 p-4 rounded-xl">Árbol $20</button>
+                                        </div>
+                                        <button className="w-full mt-6 bg-red-500 text-white py-3 rounded-xl" onClick={() => setShowShop(false)}>CERRAR</button>
+                                    </div>
+                                </div>
+                            )}
+                        </>
+                    ) : renderInterior()}
                 </div>
             );
         };
@@ -170,4 +178,3 @@
     </script>
 </body>
 </html>
-                    
